@@ -25,7 +25,10 @@ class UndefinedOption(Exception):
 
 
 def get_path_to_file(
-    directory_path: str, file_suffix: str = None, file_prefix: str = None, exact_match: str = True
+    directory_path: str,
+    file_suffix: str = None,
+    file_prefix: str = None,
+    exact_match: str = True,
 ):
     """
     Return the path to file based on given directory and suffix and if given prefix.
@@ -46,7 +49,9 @@ def get_path_to_file(
     if file_prefix:
         # ... and exact matching is asked we return exactly that file
         if exact_match:
-            expected_path = os.path.join(directory_path, file_prefix + f".{file_suffix}")
+            expected_path = os.path.join(
+                directory_path, file_prefix + f".{file_suffix}"
+            )
             return [file for file in files_in_path if file == expected_path][0]
         # If exact_matching is false all files comprising file_prefix in the file name are returned
         else:
@@ -102,7 +107,7 @@ def get_ase_atoms_object(pdb_file_path: str):
 
 def get_mdanalysis_universe(
     directory_path: str,
-    universe_type: str = "positions",
+    trajectory_file_prefix: str = None,
     topology_file_prefix: str = None,
     trajectory_format="dcd",
 ):
@@ -112,9 +117,7 @@ def get_mdanalysis_universe(
 
     Arguments:
         directory_path (str): The path to the directory in which the simulation was performed.
-        universe_type (str): Which kind of universe type (positions, forces, velocities) should
-                             be created. So far, only positions are implemented as the velocity and
-                             force-dcd files need to be converted.
+        trajectory_file_prefix (str): Name of the trajcetory file.. Only exact matching implemented here.
         topology_file_prefix (str): General name of pdb file. Only exact matching implemented here.
         trajectory_format (str) : File format of trajectory, default is dcd.
 
@@ -125,46 +128,20 @@ def get_mdanalysis_universe(
     """
 
     # Link universe_type to file names of respective trajectories via dictionary
-    # Currently, only supports default of CP2K
-    dictionary_trajectory_files = {"positions": "-pos-", "velocities": "-vel-", "forces": "-frc-"}
 
     # Look for topology file (only pdb supported) in same directory, only exact matching implemented for prefix
     topology_file = get_path_to_file(directory_path, "pdb", topology_file_prefix)
 
     print(f"Using the topology from {topology_file}.")
 
-    # Determine trajectory filenames
-    trajectory_prefix = dictionary_trajectory_files.get(universe_type)
-    if not trajectory_prefix:
-        raise UndefinedOption(
-            f"Specified {universe_type} is unknown. Possible options are {dictionary_trajectory_files.keys()}"
-        )
-
     # Look for trajectory (dcd) files , could be more than one if PIMD was performed
-    trajectory_files = get_path_to_file(
-        directory_path, trajectory_format, trajectory_prefix, exact_match=False
+    trajectory_file = get_path_to_file(
+        directory_path, trajectory_format, trajectory_file_prefix
     )
 
-    print(f"Creating universes for {len(trajectory_files)} trajectories.")
+    print(f"Creating universes for {trajectory_file}.")
 
-    if len(trajectory_files) == 1:
-        # If only one trajectory file was found, this is a classical simulation
-        return mdanalysis.Universe(topology_file, trajectory_files)
-
-    else:
-        # If multiple files were found,this is a PIMD simulation
-        # In this case we generate multiple Universes, one for each beat
-        # for calculating statical and thermodynamical properties as well
-        # as the centroid universe which should be used for dynamical properties.
-
-        # This requires that the first file is the centroid trajectory. This is automatically guaranteed
-        # by using CP2K to run the PIMD simulations which uses "*centroid*" and "*pos*"/"*vel*"/"*frc*"
-        # as part of the file names
-        centroid_universe = mdanalysis.Universe(topology_file, trajectory_files[0])
-        beat_universes = [
-            mdanalysis.Universe(topology_file, traj_file) for traj_file in trajectory_files[1::]
-        ]
-        return [centroid_universe, *beat_universes]
+    return mdanalysis.Universe(topology_file, trajectory_file)
 
 
 def apply_minimum_image_convention_to_interatomic_vectors(
@@ -207,7 +184,9 @@ def apply_minimum_image_convention_to_interatomic_vectors(
     return vectors_MIC
 
 
-def get_dipole_moment_vector_in_water_molecule(atom_group, topology, dimension: str = "xyz"):
+def get_dipole_moment_vector_in_water_molecule(
+    atom_group, topology, dimension: str = "xyz"
+):
 
     """
     Return dipole moment vector from oxygen atom to COM of hydrogen atoms of given atom group.
@@ -225,7 +204,9 @@ def get_dipole_moment_vector_in_water_molecule(atom_group, topology, dimension: 
 
     # now return dipole vector
     return apply_minimum_image_convention_to_interatomic_vectors(
-        COM_hydrogen_atoms - atom_group.select_atoms("name O").positions, topology.cell, dimension
+        COM_hydrogen_atoms - atom_group.select_atoms("name O").positions,
+        topology.cell,
+        dimension,
     ).flatten()
 
 
@@ -310,7 +291,8 @@ def compute_diffusion_coefficient_based_on_MSD(
 
     # linear regression to data selected, we are only interested in slope and the quality of the fit.
     fit_slope, __, fit_r_value, __, fit_std_err = scipy.stats.linregress(
-        measured_time[start_frame_fit:end_frame_fit], measured_msd[start_frame_fit:end_frame_fit]
+        measured_time[start_frame_fit:end_frame_fit],
+        measured_msd[start_frame_fit:end_frame_fit],
     )
 
     # tell user if fit isn't sufficiently accurate.
