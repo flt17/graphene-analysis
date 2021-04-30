@@ -56,7 +56,7 @@ class GrapheneSystem:
         Returns:
         """
 
-        self.simulations[simulation_name] = Simulation(directory_path)
+        self.simulations[simulation_name] = Simulation(directory_path, self.name)
 
 
 class Simulation:
@@ -66,12 +66,13 @@ class Simulation:
     Methods:
     """
 
-    def __init__(self, directory_path: str):
+    def __init__(self, directory_path: str, system: str = None):
         """
         Arguments:
             directory path (str) :  Path to the simulation directory.
         """
-
+        self.system = system
+        self.defect_type = "Pristine"
         self.directory_path = directory_path
         self.time_between_frames = None
         # set system periodicity per default:
@@ -252,3 +253,76 @@ class Simulation:
         self.pristine_atoms_ids = np.where(
             np.array(data.particles["Structure Type"]) == 8
         )[0]
+
+        # finish by clustering atoms to defects
+        self._assign_defective_atoms_to_defects()
+
+    def _assign_defective_atoms_to_defects(self):
+        """
+        Assign defective atoms to specific defects.
+        Arguments:
+        Returns:
+        """
+
+        # allowed atoms per defect for each type
+        allowed_atoms_per_type = {"Divacancy": 12, "Stone-Wales": 8}
+
+        # get type from system:
+        allowed_names_per_type = {
+            "Divacancy": ["DV", "Divacancy"],
+            "Stone-Wales": ["SW", "Stone-Wales"],
+        }
+
+        # assign defect type:
+        for keys, values in allowed_names_per_type.items():
+            if any(allowed_acronym in self.system for allowed_acronym in values):
+                self.defect_type = keys
+
+        # if not found assign pristine and print error
+        if self.defect_type == "Pristine":
+            raise KeyNotFound(
+                f"Cannot guess defect type from system name given: {self.system}",
+                f"Please rename the system.",
+            )
+
+        # check split is possible
+        if (
+            len(self.defective_atoms_ids) % allowed_atoms_per_type.get(self.defect_type)
+            != 0
+        ):
+            raise UnphysicalValue(
+                f"From system name I guessed you are dealing with {self.defect_type} defects.",
+                f"Each {self.defect_type} is formed by {allowed_atoms_per_type.get(self.defect_type)} atoms.",
+                f"However, I found {len(self.defective_atoms_ids)} defective atoms which cannot be properly divided.",
+            )
+
+        # if everything worked we can continue clustering the atoms
+        # start by computing vectors between all defective atoms
+        vectors_between_atoms = (
+            self.topology[self.defective_atoms_ids].positions[np.newaxis, :]
+            - self.topology[self.defective_atoms_ids].positions[:, np.newaxis]
+        )
+
+        # apply MIC
+        vectors_MIC = utils.apply_minimum_image_convention_to_interatomic_vectors(
+            vectors_between_atoms, self.topology.cell
+        )
+
+        # get distances based on vectors
+        distances = np.linalg.norm(vectors_MIC, axis=2)
+
+        # sort distances and only take the first N elements and only once
+        indices_assigned = np.unique(
+            (
+                np.sort(
+                    np.argsort(distances)[
+                        :, 0 : allowed_atoms_per_type.get(self.defect_type)
+                    ]
+                )
+            ),
+            axis=0,
+        )
+
+
+        # use this indices to get atom ids from defective atoms
+        self.defective_atoms_ids_clustered = self.defective_atoms_ids[indices_assigned]

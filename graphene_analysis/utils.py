@@ -147,31 +147,21 @@ def get_mdanalysis_universe(
 def apply_minimum_image_convention_to_interatomic_vectors(
     vectors: np.array,
     lattice_vectors: np.array,
-    dimension: str = "xyz",
 ):
     """
-    Return vectors which follow the minimum image convention. This function should be mainly
-    used in the context of larger scripts when the nearest neighbors or distance criteria are
-    needed to compute properties.
-    Currently, only implemented for orthorombic cells.
+    Return vectors which follow the minimum image convention. Modified from original
+    (confined water) script to deal with monoclinic cells. Only 2D.
 
     Arguments:
         vectors (np.array): Vectors between atoms.
         lattice_vectors (np.array): Lattice vectors of simulation box.
-        dimension (str) : to speed up calculatio only perform transformation in the periodic direction.
-
 
     Returns:
         vectors_MIC: Vectors which are in line with the minimum image convention.
     """
-    # implement minimum image convention in x-direction
 
-    if not global_variables.DIMENSION_DICTIONARY.get(dimension):
-        raise UndefinedOption(
-            f"Specified dimension {dimension} is unknown. Possible options are {global_variables.DIMENSION_DICTIONARY.keys()}"
-        )
-
-    for dim in global_variables.DIMENSION_DICTIONARY.get(dimension):
+    # for the monoclinic cell it is important that we start with the tilted vector:
+    for dim in [1,0]:
 
         vectors[
             np.where(np.take(vectors, dim, axis=-1) > lattice_vectors[dim][dim] / 2)
