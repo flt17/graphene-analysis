@@ -20,7 +20,10 @@ class TestGetPathToFile:
 
         file_name = utils.get_path_to_file(path, suffix)
 
-        assert file_name == "./files/graphene_1_divacancy.pdb"
+        assert file_name == [
+            "./files/graphene_1_divacancy.pdb",
+            "./files/graphene_20_monovacancy.pdb",
+        ]
 
     def test_returns_requested_file(self):
         path = "./files"

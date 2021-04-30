@@ -13,7 +13,7 @@ from ase.io import lammpsrun
 import MDAnalysis as mdanalysis
 
 sys.path.append("../")
-from confined_water import global_variables
+from graphene_analysis import global_variables
 
 
 class UnableToFindFile(Exception):
