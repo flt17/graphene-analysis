@@ -3,8 +3,11 @@ import numpy as np
 import pandas
 import scipy
 import scipy.signal
-import sys
+import sys, os
 from tqdm.notebook import tqdm
+from ovito.io import import_file
+from ovito.modifiers import *
+from ovito.vis import Viewport, TachyonRenderer
 
 
 sys.path.append("../")
@@ -188,6 +191,8 @@ class Simulation:
         path_to_topology = utils.get_path_to_file(
             self.directory_path, "pdb", topology_file_name
         )
+        self.path_to_topology = path_to_topology
+
         self.topology = utils.get_ase_atoms_object(path_to_topology)
 
         # Read in trajectory
@@ -199,3 +204,51 @@ class Simulation:
         )
 
         self.species_in_system = np.unique(self.position_universe.atoms.names)
+
+    def find_defective_atoms(self):
+        """
+        Find all defective atoms in the system. This part of the code was highly supported by Michael B Davies.
+        Arguments:
+        Returns:
+        """
+
+        # create the ovito “pipeline”
+        pipeline = import_file(os.path.abspath(self.path_to_topology))
+        PTM = PolyhedralTemplateMatchingModifier(
+            color_by_type=True, output_orientation=True
+        )
+
+        # list of all the different types it can calc (see doc)
+        ovito_structures = np.array(
+            [
+                (0, "other"),
+                (1, "fcc"),
+                (2, "hcp"),
+                (3, "bcc"),
+                (4, "ico"),
+                (5, "sc"),
+                (6, "cubic"),
+                (7, "hex"),
+                (8, "graphene"),
+            ]
+        )
+
+        # tell it to calculate graphene (not on by default)
+        PTM.structures[PolyhedralTemplateMatchingModifier.Type.GRAPHENE].enabled = True
+
+        # append to pipeline
+        pipeline.modifiers.append(PTM)
+
+        # run calc
+        data = pipeline.compute()
+
+        # summary
+        n_struct = ovito_structures[np.unique(data.particles["Structure Type"])]
+        count_struct = np.bincount(np.array(data.particles["Structure Type"]))
+
+        self.defective_atoms_ids = np.where(
+            np.array(data.particles["Structure Type"]) == 0
+        )[0]
+        self.pristine_atoms_ids = np.where(
+            np.array(data.particles["Structure Type"]) == 8
+        )[0]
