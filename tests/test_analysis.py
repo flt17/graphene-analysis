@@ -18,25 +18,44 @@ class TestSimulationReadInSimulationData:
 
         assert len(simulation.position_universe.trajectory) == 18
 
+
 class TestSimulationFindDefectiveAtoms:
     def test_returns_correct_ids_for_divacancy(self):
 
         path = "./files/trajectories/divacancy_36/"
 
-        simulation = analysis.Simulation(path,'Divacancy 36')
+        simulation = analysis.Simulation(path, "Divacancy 36")
         simulation.read_in_simulation_data()
         simulation.find_defective_atoms()
 
-        assert len(simulation.defective_atoms_ids)%12 ==0
+        assert len(simulation.defective_atoms_ids) % 12 == 0
 
     def test_returns_error_due_to_wrong_system_name(self):
 
         path = "./files/trajectories/divacancy_36/"
 
-        simulation = analysis.Simulation(path,'Bla Bla 36')
+        simulation = analysis.Simulation(path, "Bla Bla 36")
         simulation.read_in_simulation_data()
 
         with pytest.raises(analysis.KeyNotFound):
             simulation.find_defective_atoms()
 
 
+class TestSimulationSampleAtomicHeightDistribution:
+    def test_returns_sensible_value_for_standard_deviation(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        simulation.sample_atomic_height_distribution()
+
+        std_distribution = np.std(simulation.atomic_height_distribution)
+
+        assert np.isclose(std_distribution,3.4, atol=0.1)

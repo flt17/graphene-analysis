@@ -121,7 +121,7 @@ class Simulation:
         )
 
         total_time = (
-            self.position_universes[0].trajectory.n_frames - 1
+            self.position_universe.trajectory.n_frames - 1
         ) * self.time_between_frames
         self.end_time = (
             total_time
@@ -323,6 +323,48 @@ class Simulation:
             axis=0,
         )
 
-
         # use this indices to get atom ids from defective atoms
         self.defective_atoms_ids_clustered = self.defective_atoms_ids[indices_assigned]
+
+    def sample_atomic_height_distribution(
+        self, start_time: int = None, end_time: int = None, frame_frequency: int = None
+    ):
+        """
+        Sample the atomic heights of the graphene sheet relativ to the COM.
+        Arguments:
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # define local variable to save heights
+        atomic_heights = []
+
+        # Loop over trajectory
+        for count_frames, frames in enumerate(
+            tqdm(
+                (tmp_universe.trajectory[start_frame:end_frame])[
+                    :: int(frame_frequency)
+                ]
+            )
+        ):
+
+            # get center of mass, here this corresponds to center of geometry
+            center_of_mass = tmp_universe.atoms.center_of_mass()
+
+            # save relative heights to array
+            atomic_heights.extend(
+                tmp_universe.atoms.positions[:, 2] - center_of_mass[2]
+            )
+
+        # save array format as numpy array to class
+        self.atomic_height_distribution = np.array(atomic_heights)
