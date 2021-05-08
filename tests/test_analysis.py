@@ -5,7 +5,7 @@ import pytest
 import sys
 
 
-sys.path.append("../")
+#sys.path.append("../")
 from graphene_analysis import analysis
 
 
@@ -74,6 +74,7 @@ class TestSimulationSampleAtomicHeightDistribution:
 
         assert np.isclose(std_distribution, 3.4, atol=0.1)
 
+
 class TestSimulationGetCenterOfMassOfDefects:
     def test_raises_error_because_atoms_were_not_found(self):
 
@@ -85,7 +86,7 @@ class TestSimulationGetCenterOfMassOfDefects:
         with pytest.raises(analysis.VariableNotSet):
             simulation.get_center_of_mass_of_defects()
 
-    def test_returns_correct_center_of_masses(self):
+    def test_returns_correct_center_of_masses_for_flat(self):
 
         path = "./files/trajectories/divacancy_36/"
 
@@ -93,6 +94,21 @@ class TestSimulationGetCenterOfMassOfDefects:
         simulation.read_in_simulation_data()
         simulation.find_defective_atoms()
 
-
         COMs = simulation.get_center_of_mass_of_defects()
-        assert COMs.shape == (36,3)
+        assert COMs.shape == (36, 3)
+
+    def test_returns_correct_center_of_masses_for_random_frame(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.position_universe.trajectory[-1]
+
+        COMs = simulation.get_center_of_mass_of_defects(
+            simulation.position_universe.atoms,
+            simulation.position_universe.dimensions,
+        )
+        assert COMs.shape == (36, 3)

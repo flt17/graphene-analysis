@@ -404,24 +404,31 @@ class Simulation:
             ]
         )
 
-    def get_center_of_mass_of_defects(self, frame=None):
+    def get_center_of_mass_of_defects(
+        self, atoms_at_given_frame=None, dimensions_at_given_frame=None
+    ):
         """
         Get the center of mass of each defect. This COM is computed on the basis of the atoms
         identified by OVITO which were then assigned to the respective defects.
         This function can either be used on the flat structure or the rippled configuration.
         Arguments:
-                frame (MDAnalysis Universe frame): Contains the positions of all atoms at a given frame.
+                atoms_at_given_frame (MDAnalysis Atoms): Contains the positions of all atoms at a given frame.
                         If empty, the topology file will be used instead (flat structure).
+                dimensions_at_given_frame (np.array): Dimensions of the cell at a given frame of a trajectory.
         Returns:
                 COMs_per_defects (np.array) : Array containing the three dimensional coordinates of the COM for each defect.
         """
 
         # check if frame empty
-        if frame == None:
+        if not atoms_at_given_frame:
 
             # look at the topology
             # Create a temporary Universe based on pdb file only.
-            frame = mdanalysis.Universe(self.path_to_topology)
+            tmp_universe = mdanalysis.Universe(self.path_to_topology)
+
+            atoms_at_given_frame = tmp_universe.atoms
+
+            dimensions_at_given_frame = tmp_universe.dimensions
 
         # check whether defective atoms ids were already identified
         if not hasattr(self, "defective_atoms_ids_clustered"):
@@ -434,7 +441,7 @@ class Simulation:
         return np.array(
             [
                 utils.get_center_of_mass_of_atoms_in_accordance_with_MIC(
-                    frame.atoms[atom_ids_per_defect], frame.dimensions
+                    atoms_at_given_frame[atom_ids_per_defect], dimensions_at_given_frame
                 )
                 for atom_ids_per_defect in self.defective_atoms_ids_clustered
             ]
