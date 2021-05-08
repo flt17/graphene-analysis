@@ -161,7 +161,7 @@ def apply_minimum_image_convention_to_interatomic_vectors(
     """
 
     # for the monoclinic cell it is important that we start with the tilted vector:
-    for dim in [1,0]:
+    for dim in [1, 0]:
 
         vectors[
             np.where(np.take(vectors, dim, axis=-1) > lattice_vectors[dim][dim] / 2)
@@ -202,18 +202,33 @@ def get_dipole_moment_vector_in_water_molecule(
 
 def get_center_of_mass_of_atoms_in_accordance_with_MIC(
     atom_group,
-    topology,
+    cell_lengths_and_angles,
     dimension: str = "xyz",
 ):
     """
     Return center of mass in passed simulation box for a given atom group.
     Arguments:
         atom_group (): Atoms with given coordinates and mass.
-        lattice_vectors(ase atoms object): Topology of the system, i.e. cell lengths etc..
+        cell_lenghts_and_angles: Topology features at given frame.
         dimension (str) : to speed up calculatio only perform transformation in the periodic direction.
     Returns:
         center_of_mass_pbc (np.array): Center of mass in accordance with pbc.
     """
+
+    # get lattice vectors
+    lattice_vectors = np.asarray(
+        [
+            [cell_lengths_and_angles[0], 0, 0],
+            [
+                cell_lengths_and_angles[0]
+                * np.cos(cell_lengths_and_angles[-1] / 180 * np.pi),
+                cell_lengths_and_angles[0]
+                * np.sin(cell_lengths_and_angles[-1] / 180 * np.pi),
+                0,
+            ],
+            [0, 0, cell_lengths_and_angles[2]],
+        ]
+    )
 
     # create copy of atom group
     tmp_atom_group = atom_group.copy()
@@ -223,7 +238,7 @@ def get_center_of_mass_of_atoms_in_accordance_with_MIC(
 
     # make this vector MIC conform
     vectors_first_to_rest_MIC = apply_minimum_image_convention_to_interatomic_vectors(
-        vectors_first_to_rest, topology.cell, dimension
+        vectors_first_to_rest, lattice_vectors
     )
 
     # compute new positions which will then be used for center of mass
@@ -233,22 +248,24 @@ def get_center_of_mass_of_atoms_in_accordance_with_MIC(
     tmp_atom_group.positions = positions_MIC
 
     # compute center of mass via MDAnalysis
-    com_MIC_in_box = tmp_atom_group.center_of_mass()
+    com_MIC_in_box = tmp_atom_group.center_of_geometry()
+
+    # transfer into fractional coordinates
+    com_MIC_in_box_fractional = np.linalg.solve(
+        np.transpose(lattice_vectors), com_MIC_in_box
+    )
 
     # wrap COM inside box
-    # above cell lengths, only orthorombic
-    com_MIC_in_box[
-        np.where(com_MIC_in_box > topology.get_cell_lengths_and_angles()[0:3])
-    ] -= topology.get_cell_lengths_and_angles()[
-        np.where(com_MIC_in_box > topology.get_cell_lengths_and_angles()[0:3])
-    ]
+    # above cell lengths
+    com_MIC_in_box_fractional[np.where(com_MIC_in_box_fractional > 1)] -= 1
 
     # negative values
-    com_MIC_in_box[
-        np.where(com_MIC_in_box < np.zeros(3))
-    ] += topology.get_cell_lengths_and_angles()[np.where(com_MIC_in_box < np.zeros(3))]
+    com_MIC_in_box_fractional[np.where(com_MIC_in_box_fractional < 0)] += 1
 
-    return com_MIC_in_box
+    # transform back into cartesian
+    com_MIC_in_box_cartesian = np.dot(com_MIC_in_box_fractional, lattice_vectors)
+
+    return com_MIC_in_box_cartesian
 
 
 def compute_diffusion_coefficient_based_on_MSD(

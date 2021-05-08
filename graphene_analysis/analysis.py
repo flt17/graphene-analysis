@@ -377,7 +377,7 @@ class Simulation:
         """
         Get atom ids of defects in 'close' proximity to the defect center.
         Arguments:
-                cutoff (float)
+                cutoff (float): cutoff in angstroms within atoms will be assigned to the defect.
         Returns:
         """
 
@@ -404,15 +404,41 @@ class Simulation:
             ]
         )
 
-
-    def get_center_of_mass_of_defects(self):
+    def get_center_of_mass_of_defects(self, frame=None):
         """
-        Get the center of mass of each defect.
-        Arguments: tbc
-        Returns: tbc
+        Get the center of mass of each defect. This COM is computed on the basis of the atoms
+        identified by OVITO which were then assigned to the respective defects.
+        This function can either be used on the flat structure or the rippled configuration.
+        Arguments:
+                frame (MDAnalysis Universe frame): Contains the positions of all atoms at a given frame.
+                        If empty, the topology file will be used instead (flat structure).
+        Returns:
+                COMs_per_defects (np.array) : Array containing the three dimensional coordinates of the COM for each defect.
         """
 
-        pass
+        # check if frame empty
+        if frame == None:
+
+            # look at the topology
+            # Create a temporary Universe based on pdb file only.
+            frame = mdanalysis.Universe(self.path_to_topology)
+
+        # check whether defective atoms ids were already identified
+        if not hasattr(self, "defective_atoms_ids_clustered"):
+            raise VariableNotSet(
+                f"Cannot find atom ids clustered per defect.",
+                f"Please run 'INSTANCE.find_defective_atoms()' before running this routine.",
+            )
+
+        # now compute COM for all defects based on previously assigned ids
+        return np.array(
+            [
+                utils.get_center_of_mass_of_atoms_in_accordance_with_MIC(
+                    frame.atoms[atom_ids_per_defect], frame.dimensions
+                )
+                for atom_ids_per_defect in self.defective_atoms_ids_clustered
+            ]
+        )
 
     def get_orientation_of_defect(self):
         """
