@@ -41,6 +41,20 @@ class TestSimulationFindDefectiveAtoms:
             simulation.find_defective_atoms()
 
 
+class TestSimulationFindAtomsAroundDefectsWithinCutoff:
+    def test_returns_correct_ids_for_divacancy(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=2.0)
+
+        assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
+
+
 class TestSimulationSampleAtomicHeightDistribution:
     def test_returns_sensible_value_for_standard_deviation(self):
 
@@ -58,4 +72,4 @@ class TestSimulationSampleAtomicHeightDistribution:
 
         std_distribution = np.std(simulation.atomic_height_distribution)
 
-        assert np.isclose(std_distribution,3.4, atol=0.1)
+        assert np.isclose(std_distribution, 3.4, atol=0.1)

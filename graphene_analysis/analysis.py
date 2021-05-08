@@ -9,6 +9,7 @@ from ovito.io import import_file
 from ovito.modifiers import *
 from ovito.vis import Viewport, TachyonRenderer
 
+import MDAnalysis as mdanalysis
 
 sys.path.append("../")
 from graphene_analysis import global_variables
@@ -368,3 +369,56 @@ class Simulation:
 
         # save array format as numpy array to class
         self.atomic_height_distribution = np.array(atomic_heights)
+
+    def find_atoms_around_defects_within_cutoff(
+        self,
+        cutoff: float = 2.0,
+    ):
+        """
+        Get atom ids of defects in 'close' proximity to the defect center.
+        Arguments:
+                cutoff (float)
+        Returns:
+        """
+
+        # To obtain the same number for all defects of the same type we need to look
+        # at the flat structure, i.e. the pdb file.
+        # Create a temporary Universe based on pdb file only.
+        universe_flat_configuration = mdanalysis.Universe(self.path_to_topology)
+
+        # Now use feature from MDAnalysis. This will be used to check the adjacent atoms
+        scan_neighbors = mdanalysis.lib.NeighborSearch.AtomNeighborSearch(
+            universe_flat_configuration.atoms, self.topology.cell.cellpar()
+        )
+
+        # Now loop over all defects which were previously assigned and find all atom ids
+        # within the cutoff specfied (default 2 angstroms)
+        self.atoms_ids_around_defects_clustered = np.array(
+            [
+                scan_neighbors.search(
+                    universe_flat_configuration.atoms[defective_atoms_per_defect],
+                    cutoff,
+                    "A",
+                ).indices
+                for defective_atoms_per_defect in self.defective_atoms_ids_clustered
+            ]
+        )
+
+
+    def get_center_of_mass_of_defects(self):
+        """
+        Get the center of mass of each defect.
+        Arguments: tbc
+        Returns: tbc
+        """
+
+        pass
+
+    def get_orientation_of_defect(self):
+        """
+        Get the orientation of a defect w.r.t. to cartesian coordinates.
+        Arguments: tbc
+        Returns: tbc
+        """
+
+        pass
