@@ -125,3 +125,15 @@ class TestSimulationGetOrientationsOfDefects:
         simulation.get_orientation_of_defects()
 
         assert len(simulation.orientations_per_defect) == 36
+
+    def test_returns_correct_orientations_for_stone_wales(self):
+
+        path = "./files/trajectories/stone-wales_12/"
+
+        simulation = analysis.Simulation(path, "Stone-Wales 12")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.get_orientation_of_defects()
+        
+        assert len(simulation.orientations_per_defect) == 12

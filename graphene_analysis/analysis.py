@@ -267,7 +267,7 @@ class Simulation:
         """
 
         # allowed atoms per defect for each type
-        allowed_atoms_per_type = {"Divacancy": 12, "Stone-Wales": 8}
+        allowed_atoms_per_type = {"Divacancy": 12, "Stone-Wales": 14}
 
         # get type from system:
         allowed_names_per_type = {
@@ -543,9 +543,48 @@ class Simulation:
             )
             # based on these vectors we can compute the orientation.
             # note, that we define the origin (0 degrees) relative to the y-axis.
-            self.orientations_per_defect = np.arccos(np.clip(
-                vectors_between_octagon_edges[:, 1]
-                / np.linalg.norm(vectors_between_octagon_edges, axis=1),-1,1)
+            self.orientations_per_defect = np.arccos(
+                np.clip(
+                    vectors_between_octagon_edges[:, 1]
+                    / np.linalg.norm(vectors_between_octagon_edges, axis=1),
+                    -1,
+                    1,
+                )
             )
 
-            
+        # now for Stone-Wales defect
+        elif self.defect_type == "Stone-Wales":
+
+            # identify indices of 2 nearest atoms, i.e. edges of pentagons.
+            indices_nearest_atoms = np.argsort(distances_defective_atoms_to_COMs)[
+                :, 0:2
+            ]
+
+            # identify positions of 2 nearest nearest atoms
+            positions_nearest_atoms = np.array(
+                [
+                    positions_defective_atoms_relative_to_COMs[defect, indices]
+                    for defect, indices in enumerate(indices_nearest_atoms)
+                ]
+            )
+
+            # compute vector from first to second index
+            vectors_between_pentagon_edges = np.asarray(
+                [
+                    (
+                        positions_nearest_atoms[defect][1]
+                        - positions_nearest_atoms[defect][0]
+                    )
+                    for defect in np.arange(positions_nearest_atoms.shape[0])
+                ]
+            )
+            # based on these vectors we can compute the orientation.
+            # note, that we define the origin (0 degrees) relative to the x-axis (pentagon-axis).
+            self.orientations_per_defect = np.arccos(
+                np.clip(
+                    vectors_between_pentagon_edges[:, 0]
+                    / np.linalg.norm(vectors_between_pentagon_edges, axis=1),
+                    -1,
+                    1,
+                )
+            )
