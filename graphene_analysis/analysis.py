@@ -10,6 +10,7 @@ from ovito.modifiers import *
 from ovito.vis import Viewport, TachyonRenderer
 
 import MDAnalysis as mdanalysis
+from ase.visualize import view
 
 sys.path.append("../")
 from graphene_analysis import global_variables
@@ -447,11 +448,104 @@ class Simulation:
             ]
         )
 
-    def get_orientation_of_defect(self):
+    def get_orientation_of_defects(self):
         """
         Get the orientation of a defect w.r.t. to cartesian coordinates.
         Arguments: tbc
         Returns: tbc
         """
 
-        pass
+        # check whether defective atoms ids were already identified
+        if not hasattr(self, "defective_atoms_ids_clustered"):
+            raise VariableNotSet(
+                f"Cannot find atom ids clustered per defect.",
+                f"Please run 'INSTANCE.find_defective_atoms()' before running this routine.",
+            )
+
+        # Always look at the flat structure to obtain initial orientation.
+        # Create a temporary Universe based on pdb file only.
+        universe_flat_configuration = mdanalysis.Universe(self.path_to_topology)
+
+        # we need the center of mass for each defect to obtain the orientation
+        COMs_per_defect = self.get_center_of_mass_of_defects()
+
+        # first translate to local coordinate system at COMs of the defect
+        # and make sure it satisfies pbc
+        positions_defective_atoms_relative_to_COMs = np.asarray(
+            [
+                utils.apply_minimum_image_convention_to_interatomic_vectors(
+                    universe_flat_configuration.atoms[
+                        defective_atoms_per_defect
+                    ].positions
+                    - COMs_per_defect[count_defect],
+                    self.topology.cell,
+                )
+                for count_defect, defective_atoms_per_defect in enumerate(
+                    self.defective_atoms_ids_clustered
+                )
+            ]
+        )
+
+        # get distances to COM which will be used to compute orientation
+        distances_defective_atoms_to_COMs = np.linalg.norm(
+            positions_defective_atoms_relative_to_COMs, axis=2
+        )
+
+        # now compute orientation dependent on defect type:
+        if self.defect_type == "Divacancy":
+
+            # identify indices of 4 second nearest atoms, i.e. edges of octagon.
+            indices_2nd_nearest_atoms = np.argsort(distances_defective_atoms_to_COMs)[
+                :, 4:8
+            ]
+
+            # identify positions of 4 second nearest nearest atoms
+            positions_2nd_nearest_atoms = np.array(
+                [
+                    positions_defective_atoms_relative_to_COMs[defect, indices]
+                    for defect, indices in enumerate(indices_2nd_nearest_atoms)
+                ]
+            )
+
+            # compute distances from first atom of the octagon edges to the rest for each defect
+            distances_2nd_nearest_atoms_relative = np.asarray(
+                [
+                    np.linalg.norm(
+                        positions_2nd_nearest_atoms[defect]
+                        - positions_2nd_nearest_atoms[defect][0],
+                        axis=1,
+                    )
+                    for defect in np.arange(positions_2nd_nearest_atoms.shape[0])
+                ]
+            )
+
+            # for these atom groups we want to find the vectors ranging from one end ot the other of the octagon.
+            vectors_between_octagon_edges = np.asarray(
+                [
+                    np.mean(
+                        positions_2nd_nearest_atoms[defect][
+                            np.argsort(distances_2nd_nearest_atoms_relative[defect])[
+                                0:2
+                            ]
+                        ],
+                        axis=0,
+                    )
+                    - np.mean(
+                        positions_2nd_nearest_atoms[defect][
+                            np.argsort(distances_2nd_nearest_atoms_relative[defect])[
+                                2:4
+                            ]
+                        ],
+                        axis=0,
+                    )
+                    for defect in np.arange(positions_2nd_nearest_atoms.shape[0])
+                ]
+            )
+            # based on these vectors we can compute the orientation.
+            # note, that we define the origin (0 degrees) relative to the y-axis.
+            self.orientations_per_defect = np.arccos(np.clip(
+                vectors_between_octagon_edges[:, 1]
+                / np.linalg.norm(vectors_between_octagon_edges, axis=1),-1,1)
+            )
+
+            

@@ -112,3 +112,16 @@ class TestSimulationGetCenterOfMassOfDefects:
             simulation.position_universe.dimensions,
         )
         assert COMs.shape == (36, 3)
+
+class TestSimulationGetOrientationsOfDefects:
+    def test_returns_correct_orientations_for_divacancies(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.get_orientation_of_defects()
+
+        assert len(simulation.orientations_per_defect) == 36
