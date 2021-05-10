@@ -605,16 +605,23 @@ class Simulation:
             )
 
     def compute_local_environments_geometry(
-        self, start_time: int = None, end_time: int = None, frame_frequency: int = None
+        self,
+        r2_score_criterion=0.90,
+        start_time: int = None,
+        end_time: int = None,
+        frame_frequency: int = None,
     ):
         """
         Compute local curvature and inclination around defects.
         Arguments:
+            r2_score_criterion: Minimum R2 score required to allow analysis. 
             start_time (int) : Start time for analysis (optional).
             end_time (int) : End time for analysis (optional).
             frame_frequency (int): Take every nth frame only (optional).
         Returns:
+            fitting_success_rate (float): Percentage success rate of the fit of the geometry.
         """
+
 
         # get information about sampling
         start_frame, end_frame, frame_frequency = self._get_sampling_frames(
@@ -626,6 +633,13 @@ class Simulation:
 
         # obtain initial orientation of each defect
         self.get_orientation_of_defects()
+
+        # local variable to see how many fits fail
+        count_fit_fail = 0
+
+        # initialise arrays for jacobian and hessian eigenvalues
+        jacobians = []
+        hessians_eigenvalues = []
 
         # Loop over trajectory
         for count_frames, frames in enumerate(
@@ -703,6 +717,45 @@ class Simulation:
                 positions_local_atoms_translated_and_rotated.shape[1]
                 - np.var(positions_local_atoms_translated_and_rotated[:, :, 2], axis=1)
             )
-            breakpoint()
 
-        return positions_local_atoms_translated_and_rotated
+            # now check where r2 scores satisfy criterion
+            black_sheep_indices = np.where(r2_scores_per_defect < r2_score_criterion)[0]
+
+            # update counter for fit failures
+            count_fit_fail += len(black_sheep_indices)
+
+            # get coefficients for successful fits
+            valid_coefficients = np.concatenate(
+                np.delete(fitting_data[:, 0], black_sheep_indices)
+            ).reshape((-1, 6))
+
+            # now compute Jacobian of analytical at defect center, i.e. [b,c]
+            jacobians.extend(valid_coefficients[:, 1:3])
+
+            # define hessian
+            hessians = np.dstack(
+                [
+                    2 * valid_coefficients[:, 4],
+                    valid_coefficients[:, 3],
+                    valid_coefficients[:, 3],
+                    2 * valid_coefficients[:, 5],
+                ]
+            ).reshape(-1, 2, 2)
+
+            # now compute eigenvalues of each hessian
+            hessians_eigenvalues.extend(np.linalg.eig(hessians)[0])
+
+        # wrap up everything
+
+        self.jacobians = np.asarray(jacobians)
+        self.hessians_eigenvalues = np.asarray(hessians_eigenvalues)
+
+        # print successrate
+        fitting_success_rate = (1-count_fit_fail / (count_fit_fail+self.jacobians.shape[0]))*100
+
+        print(f"Fitted {fitting_success_rate} % of environemnts successfully by applying R2-threshold of {r2_score_criterion}.", 
+            f"Only {count_fit_fail}/{count_fit_fail+self.jacobians.shape[0]} failed.")
+
+        return fitting_success_rate
+
+

@@ -152,7 +152,22 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
         simulation.find_defective_atoms()
         simulation.find_atoms_around_defects_within_cutoff()
 
+        success_rate = simulation.compute_local_environments_geometry()
+        assert success_rate > 90
 
+    def test_returns_correct_geometries_for_stone_wales(self):
 
-        simulation.compute_local_environments_geometry()
+        path = "./files/trajectories/stone-wales_12/"
+
+        simulation = analysis.Simulation(path, "Stone-Wales 12")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        simulation.find_defective_atoms()
+        simulation.find_atoms_around_defects_within_cutoff()
+
+        success_rate = simulation.compute_local_environments_geometry()
+        assert success_rate > 90
 
