@@ -451,8 +451,8 @@ class Simulation:
     def get_orientation_of_defects(self):
         """
         Get the orientation of a defect w.r.t. to cartesian coordinates.
-        Arguments: tbc
-        Returns: tbc
+        Arguments:
+        Returns:
         """
 
         # check whether defective atoms ids were already identified
@@ -541,15 +541,29 @@ class Simulation:
                     for defect in np.arange(positions_2nd_nearest_atoms.shape[0])
                 ]
             )
-            # based on these vectors we can compute the orientation.
+
+            # make sure they all point in the same direction (low y to high y)
+            vectors_between_octagon_edges[
+                np.where(vectors_between_octagon_edges[:, 1] < 0)[0]
+            ] *= -1
+
+            # define normed dot product
             # note, that we define the origin (0 degrees) relative to the y-axis.
-            self.orientations_per_defect = np.arccos(
-                np.clip(
-                    vectors_between_octagon_edges[:, 1]
-                    / np.linalg.norm(vectors_between_octagon_edges, axis=1),
-                    -1,
-                    1,
-                )
+            normed_dot_product = np.clip(
+                vectors_between_octagon_edges[:, 1]
+                / np.linalg.norm(vectors_between_octagon_edges, axis=1),
+                -1.0,
+                1.0,
+            )
+
+            # based on these vectors we can compute the orientation.
+            self.orientations_per_defect = np.asarray(
+                [
+                    np.arccos(normed_dot_product[defect])
+                    if vectors_between_octagon_edges[defect, 0] >= 0
+                    else -np.arccos(normed_dot_product[defect])
+                    for defect in np.arange(len(normed_dot_product))
+                ]
             )
 
         # now for Stone-Wales defect
@@ -588,3 +602,79 @@ class Simulation:
                     1,
                 )
             )
+
+    def compute_local_environments_geometry(
+        self, start_time: int = None, end_time: int = None, frame_frequency: int = None
+    ):
+        """
+        Compute local curvature and inclination around defects.
+        Arguments:
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # obtain initial orientation of each defect
+        self.get_orientation_of_defects()
+
+        # Loop over trajectory
+        for count_frames, frames in enumerate(
+            tqdm(
+                (tmp_universe.trajectory[start_frame:end_frame])[
+                    :: int(frame_frequency)
+                ]
+            )
+        ):
+
+            # obtain centers of mass of defects
+            COMs_per_defect = self.get_center_of_mass_of_defects(
+                tmp_universe.atoms, tmp_universe.dimensions
+            )
+
+            # to be able to fit a auxilary function to the the relative atomic positions
+            # we need first to make the environments comparable.
+            # To this end, we will 1. translate all defects to a local coordinate system and
+            # 2. Rotate the defects around the z-axis so that all local environments are equally orientated.
+
+            # 1. Translation to COM of defects
+            # we need to make sure this satisfies the pbc
+            positions_local_atoms_relative_to_COMs = np.asarray(
+                [
+                    utils.apply_minimum_image_convention_to_interatomic_vectors(
+                        tmp_universe.atoms[local_atoms_per_defect].positions
+                        - COMs_per_defect[count_defect],
+                        utils.get_cell_vectors_from_lengths_and_angles(
+                            tmp_universe.dimensions
+                        ),
+                    )
+                    for count_defect, local_atoms_per_defect in enumerate(
+                        self.atoms_ids_around_defects_clustered
+                    )
+                ]
+            )
+
+            # 2. Rotate around z-axis
+            positions_local_atoms_translated_and_rotated = np.asarray(
+                [
+                    np.matmul(
+                        utils.rotation_matrix(
+                            np.array([0, 0, 1]), self.orientations_per_defect[defect]
+                        ),
+                        positions_local_atoms_relative_to_COMs[defect].T,
+                    ).T
+                    for defect in np.arange(self.orientations_per_defect.shape[0])
+                ]
+            )
+
+        return positions_local_atoms_translated_and_rotated
+
+        # around z axis

@@ -135,5 +135,24 @@ class TestSimulationGetOrientationsOfDefects:
         simulation.find_defective_atoms()
 
         simulation.get_orientation_of_defects()
-        
+
         assert len(simulation.orientations_per_defect) == 12
+
+class TestSimulationComputeLocalEnvironmentsGeometry:
+    def test_returns_correct_geometries_for_divacancy(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        simulation.find_defective_atoms()
+        simulation.find_atoms_around_defects_within_cutoff()
+
+
+
+        simulation.compute_local_environments_geometry()
+

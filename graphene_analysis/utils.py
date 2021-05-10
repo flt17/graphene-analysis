@@ -200,6 +200,30 @@ def get_dipole_moment_vector_in_water_molecule(
     ).flatten()
 
 
+def get_cell_vectors_from_lengths_and_angles(cell_lengths_and_angles):
+    """
+    Return lattice vectors based on the lenghts and angles of the simulation cell.
+    Arguments:
+        cell_lenghts_and_angles (1x6 np.array): Topology features at given frame.
+    Returns:
+        lattice_vectors (np.array 3x3): Lattice vectors.
+    """
+
+    return np.asarray(
+        [
+            [cell_lengths_and_angles[0], 0, 0],
+            [
+                cell_lengths_and_angles[0]
+                * np.cos(cell_lengths_and_angles[-1] / 180 * np.pi),
+                cell_lengths_and_angles[0]
+                * np.sin(cell_lengths_and_angles[-1] / 180 * np.pi),
+                0,
+            ],
+            [0, 0, cell_lengths_and_angles[2]],
+        ]
+    )
+
+
 def get_center_of_mass_of_atoms_in_accordance_with_MIC(
     atom_group,
     cell_lengths_and_angles,
@@ -216,19 +240,7 @@ def get_center_of_mass_of_atoms_in_accordance_with_MIC(
     """
 
     # get lattice vectors
-    lattice_vectors = np.asarray(
-        [
-            [cell_lengths_and_angles[0], 0, 0],
-            [
-                cell_lengths_and_angles[0]
-                * np.cos(cell_lengths_and_angles[-1] / 180 * np.pi),
-                cell_lengths_and_angles[0]
-                * np.sin(cell_lengths_and_angles[-1] / 180 * np.pi),
-                0,
-            ],
-            [0, 0, cell_lengths_and_angles[2]],
-        ]
-    )
+    lattice_vectors = get_cell_vectors_from_lengths_and_angles(cell_lengths_and_angles)
 
     # create copy of atom group
     tmp_atom_group = atom_group.copy()
