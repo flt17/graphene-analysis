@@ -3,6 +3,7 @@ import numpy as np
 import pandas
 import scipy
 import scipy.signal
+from sklearn.metrics import r2_score
 import sys, os
 from tqdm.notebook import tqdm
 from ovito.io import import_file
@@ -675,6 +676,33 @@ class Simulation:
                 ]
             )
 
-        return positions_local_atoms_translated_and_rotated
+            # now we have to fit a 2D function to the relative positions
+            # f_h(x,y) = a + bx + cy + dxy + ex^2 + f y^2
 
-        # around z axis
+            # compute coefficients and residuum for each defect saved in fitting_data
+            fitting_data = np.asarray(
+                [
+                    scipy.linalg.lstsq(
+                        np.c_[
+                            np.ones(atomic_positions.shape[0]),
+                            atomic_positions[:, :2],
+                            np.prod(atomic_positions[:, :2], axis=1),
+                            atomic_positions[:, :2] ** 2,
+                        ],
+                        atomic_positions[:, 2],
+                    )[0:2]
+                    for atomic_positions in positions_local_atoms_translated_and_rotated
+                ]
+            )
+
+            # extract residuums for each defect
+            residuums = fitting_data[:, 1]
+
+            # use these to compute r2-score
+            r2_scores_per_defect = 1 - residuums / (
+                positions_local_atoms_translated_and_rotated.shape[1]
+                - np.var(positions_local_atoms_translated_and_rotated[:, :, 2], axis=1)
+            )
+            breakpoint()
+
+        return positions_local_atoms_translated_and_rotated
