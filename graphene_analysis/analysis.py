@@ -209,56 +209,137 @@ class Simulation:
 
         self.species_in_system = np.unique(self.position_universe.atoms.names)
 
-    def find_defective_atoms(self):
+    def find_defective_atoms(
+        self, pristine: bool = False, number_of_artificial_defects: int = 36
+    ):
         """
         Find all defective atoms in the system. This part of the code was highly supported by Michael B Davies.
         Arguments:
+            pristine (boolean): If true, random atoms are assigned as defect centers (minimum distance 10A).
+            number_of_artificial_defects (int): In case of pristine graphene how many defect centers will be created.
         Returns:
         """
 
-        # create the ovito “pipeline”
-        pipeline = import_file(os.path.abspath(self.path_to_topology))
-        PTM = PolyhedralTemplateMatchingModifier(
-            color_by_type=True, output_orientation=True
-        )
+        # standard proceedure if no 'artificial' defects need to be created
+        if not pristine:
+            # create the ovito “pipeline”
+            pipeline = import_file(os.path.abspath(self.path_to_topology))
+            PTM = PolyhedralTemplateMatchingModifier(
+                color_by_type=True, output_orientation=True
+            )
 
-        # list of all the different types it can calc (see doc)
-        ovito_structures = np.array(
-            [
-                (0, "other"),
-                (1, "fcc"),
-                (2, "hcp"),
-                (3, "bcc"),
-                (4, "ico"),
-                (5, "sc"),
-                (6, "cubic"),
-                (7, "hex"),
-                (8, "graphene"),
-            ]
-        )
+            # list of all the different types it can calc (see doc)
+            ovito_structures = np.array(
+                [
+                    (0, "other"),
+                    (1, "fcc"),
+                    (2, "hcp"),
+                    (3, "bcc"),
+                    (4, "ico"),
+                    (5, "sc"),
+                    (6, "cubic"),
+                    (7, "hex"),
+                    (8, "graphene"),
+                ]
+            )
 
-        # tell it to calculate graphene (not on by default)
-        PTM.structures[PolyhedralTemplateMatchingModifier.Type.GRAPHENE].enabled = True
+            # tell it to calculate graphene (not on by default)
+            PTM.structures[
+                PolyhedralTemplateMatchingModifier.Type.GRAPHENE
+            ].enabled = True
 
-        # append to pipeline
-        pipeline.modifiers.append(PTM)
+            # append to pipeline
+            pipeline.modifiers.append(PTM)
 
-        # run calc
-        data = pipeline.compute()
+            # run calc
+            data = pipeline.compute()
 
-        # summary
-        n_struct = ovito_structures[np.unique(data.particles["Structure Type"])]
-        count_struct = np.bincount(np.array(data.particles["Structure Type"]))
+            # summary
+            n_struct = ovito_structures[np.unique(data.particles["Structure Type"])]
+            count_struct = np.bincount(np.array(data.particles["Structure Type"]))
 
-        self.defective_atoms_ids = np.where(
-            np.array(data.particles["Structure Type"]) == 0
-        )[0]
-        self.pristine_atoms_ids = np.where(
-            np.array(data.particles["Structure Type"]) == 8
-        )[0]
+            self.defective_atoms_ids = np.where(
+                np.array(data.particles["Structure Type"]) == 0
+            )[0]
+            self.pristine_atoms_ids = np.where(
+                np.array(data.particles["Structure Type"]) == 8
+            )[0]
 
-        # finish by clustering atoms to defects
-        self._assign_defective_atoms_to_defects()
+            # finish by clustering atoms to defects
+            self._assign_defective_atoms_to_defects()
+
+        else:
+
+            random_defect_center_atoms = self.pick_atoms_obeying_distance_criterion(
+                number_of_artificial_defects
+            )
+
+            # we will now assign these atoms as defective atoms
+            self.defective_atoms_ids = random_defect_center_atoms
+            self.defective_atoms_ids_clustered = random_defect_center_atoms.reshape(-1,1)
+
+            # then we compute atoms around it, due to definition we need to save this differently
+            self.find_atoms_around_defects_within_cutoff(cutoff=2.5)
+            
+            # now save as defective atom ids and clustered
+            self.defective_atoms_ids = np.sort(np.concatenate(self.atoms_ids_around_defects_clustered))
+            self.defective_atoms_ids_clustered = self.atoms_ids_around_defects_clustered
+
+
+    def pick_atoms_obeying_distance_criterion(
+        self, number_of_atoms_to_be_picked: int, minimum_distance_criterion: float = 15
+    ):
+        """
+        Pick N randoms atoms being separated by minimum distance. So far based on topology file (static pdb)
+        Arguments:
+            number_of_atoms_to_be_picked (int): Number of atoms selected.
+            minimum_distance_criterion (float): Minimum distance separating the atoms in angstroms.
+        Returns:
+            picked_atom_indices (array) : Indices of picked atoms
+        """
+
+        # define array to save indices
+        indices_picked_atoms = []
+
+        # intialise variable
+        distances_accepted_to_new = 0 
+
+        # start looping over number of atoms to be picked
+        for atom_number in np.arange(number_of_atoms_to_be_picked):
+
+            # for first just pick random number
+            if atom_number == 0:
+                indices_picked_atoms.append(
+                    np.random.randint(0, self.topology.get_global_number_of_atoms())
+                )
+
+            # for all future atoms we have to check whether this atom has already been picked and
+            # whether it obeys the minimum distance criterion
+            else:
+                # now check that distances are larger than cutoff, otherwise pick different atom
+                while np.any(distances_accepted_to_new < minimum_distance_criterion):
+                    # try random index
+                    trial_index = np.random.randint(
+                        0, self.topology.get_global_number_of_atoms()
+                    )
+
+                    # compute distances to already picked indices
+                    distances_accepted_to_new = np.linalg.norm(
+                        utils.apply_minimum_image_convention_to_interatomic_vectors(
+                            self.topology[indices_picked_atoms].positions
+                            - self.topology[trial_index].position,
+                            self.topology.cell,
+                        ),
+                        axis=1,
+                    )
+                
+                # add accepted index to list
+                indices_picked_atoms.append(trial_index)
+
+                # reset distances
+                distances_accepted_to_new = 0 
+
+        return np.asarray(indices_picked_atoms)
 
     def _assign_defective_atoms_to_defects(self):
         """
@@ -614,14 +695,13 @@ class Simulation:
         """
         Compute local curvature and inclination around defects.
         Arguments:
-            r2_score_criterion: Minimum R2 score required to allow analysis. 
+            r2_score_criterion: Minimum R2 score required to allow analysis.
             start_time (int) : Start time for analysis (optional).
             end_time (int) : End time for analysis (optional).
             frame_frequency (int): Take every nth frame only (optional).
         Returns:
             fitting_success_rate (float): Percentage success rate of the fit of the geometry.
         """
-
 
         # get information about sampling
         start_frame, end_frame, frame_frequency = self._get_sampling_frames(
@@ -751,11 +831,13 @@ class Simulation:
         self.hessians_eigenvalues = np.asarray(hessians_eigenvalues)
 
         # print successrate
-        fitting_success_rate = (1-count_fit_fail / (count_fit_fail+self.jacobians.shape[0]))*100
+        fitting_success_rate = (
+            1 - count_fit_fail / (count_fit_fail + self.jacobians.shape[0])
+        ) * 100
 
-        print(f"Fitted {fitting_success_rate} % of environemnts successfully by applying R2-threshold of {r2_score_criterion}.", 
-            f"Only {count_fit_fail}/{count_fit_fail+self.jacobians.shape[0]} failed.")
+        print(
+            f"Fitted {fitting_success_rate} % of environemnts successfully by applying R2-threshold of {r2_score_criterion}.",
+            f"Only {count_fit_fail}/{count_fit_fail+self.jacobians.shape[0]} failed.",
+        )
 
         return fitting_success_rate
-
-

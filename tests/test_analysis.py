@@ -40,6 +40,16 @@ class TestSimulationFindDefectiveAtoms:
         with pytest.raises(analysis.KeyNotFound):
             simulation.find_defective_atoms()
 
+    def test_returns_correct_ids_for_pristine(self):
+
+        path = "./files/trajectories/pristine/"
+
+        simulation = analysis.Simulation(path, "Pristine")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+
+        assert len(simulation.defective_atoms_ids) % 12 == 0
+
 
 class TestSimulationFindAtomsAroundDefectsWithinCutoff:
     def test_returns_correct_ids_for_divacancy(self):
