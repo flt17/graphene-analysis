@@ -64,6 +64,18 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
 
         assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
 
+    def test_returns_correct_ids_for_pristine(self):
+
+        path = "./files/trajectories/pristine/"
+
+        simulation = analysis.Simulation(path, "Pristine")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=2.0)
+    
+        assert simulation.atoms_ids_around_defects_clustered.shape[1] == 19
+
 
 class TestSimulationSampleAtomicHeightDistribution:
     def test_returns_sensible_value_for_standard_deviation(self):
