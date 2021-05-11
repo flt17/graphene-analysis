@@ -5,7 +5,6 @@ import sys, os
 from tqdm.notebook import tqdm
 from ovito.io import import_file
 from ovito.modifiers import *
-from ovito.vis import Viewport, TachyonRenderer
 
 import MDAnalysis as mdanalysis
 from ase.visualize import view
