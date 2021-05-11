@@ -3,7 +3,6 @@ import numpy as np
 import pandas
 import scipy
 import scipy.signal
-from sklearn.metrics import r2_score
 import sys, os
 from tqdm.notebook import tqdm
 from ovito.io import import_file
