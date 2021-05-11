@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="confined-water-analysis",
+    name="graphene-analysis",
     version="0.1.0",
     url="https://tbd.com",
     author="Fabian Thiemann",
