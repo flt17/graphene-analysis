@@ -1,8 +1,6 @@
 import math
 import numpy as np
-import pandas
 import scipy
-import scipy.signal
 import sys, os
 from tqdm.notebook import tqdm
 from ovito.io import import_file

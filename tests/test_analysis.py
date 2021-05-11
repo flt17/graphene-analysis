@@ -1,6 +1,5 @@
 import numpy as np
 import os
-import pandas
 import pytest
 import sys
 
