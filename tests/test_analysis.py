@@ -205,3 +205,21 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
         success_rate = simulation.compute_local_environments_geometry()
         assert success_rate > 90
 
+
+    def test_returns_correct_geometries_for_pristine(self):
+
+        path = "./files/trajectories/pristine/"
+
+        simulation = analysis.Simulation(path, "Pristine ")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_atoms_around_defects_within_cutoff()
+
+        success_rate = simulation.compute_local_environments_geometry()
+        
+        assert success_rate > 90
+
