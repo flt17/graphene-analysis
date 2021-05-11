@@ -276,15 +276,18 @@ class Simulation:
 
             # we will now assign these atoms as defective atoms
             self.defective_atoms_ids = random_defect_center_atoms
-            self.defective_atoms_ids_clustered = random_defect_center_atoms.reshape(-1,1)
+            self.defective_atoms_ids_clustered = random_defect_center_atoms.reshape(
+                -1, 1
+            )
 
             # then we compute atoms around it, due to definition we need to save this differently
             self.find_atoms_around_defects_within_cutoff(cutoff=2.5)
-            
-            # now save as defective atom ids and clustered
-            self.defective_atoms_ids = np.sort(np.concatenate(self.atoms_ids_around_defects_clustered))
-            self.defective_atoms_ids_clustered = self.atoms_ids_around_defects_clustered
 
+            # now save as defective atom ids and clustered
+            self.defective_atoms_ids = np.sort(
+                np.concatenate(self.atoms_ids_around_defects_clustered)
+            )
+            self.defective_atoms_ids_clustered = self.atoms_ids_around_defects_clustered
 
     def pick_atoms_obeying_distance_criterion(
         self, number_of_atoms_to_be_picked: int, minimum_distance_criterion: float = 15
@@ -302,7 +305,7 @@ class Simulation:
         indices_picked_atoms = []
 
         # intialise variable
-        distances_accepted_to_new = 0 
+        distances_accepted_to_new = 0
 
         # start looping over number of atoms to be picked
         for atom_number in np.arange(number_of_atoms_to_be_picked):
@@ -332,12 +335,12 @@ class Simulation:
                         ),
                         axis=1,
                     )
-                
+
                 # add accepted index to list
                 indices_picked_atoms.append(trial_index)
 
                 # reset distances
-                distances_accepted_to_new = 0 
+                distances_accepted_to_new = 0
 
         return np.asarray(indices_picked_atoms)
 
@@ -683,6 +686,37 @@ class Simulation:
                     -1,
                     1,
                 )
+            )
+
+        # now for pristine graphene
+        elif self.defect_type == "Pristine":
+
+            # identify indices of 3 second nearest atoms, i.e. atoms next to artificial vacancy.
+            indices_2nd_nearest_atoms = np.argsort(distances_defective_atoms_to_COMs)[
+                :, 1:4
+            ]
+
+            # identify positions of 3 second nearest nearest atoms
+            positions_2nd_nearest_atoms = np.array(
+                [
+                    positions_defective_atoms_relative_to_COMs[defect, indices]
+                    for defect, indices in enumerate(indices_2nd_nearest_atoms)
+                ]
+            )
+
+            # check how many atoms are below (- y) COM atom and how many below for each defect
+            _, count_atoms_below_COM = np.unique(
+                np.where(positions_2nd_nearest_atoms[:, :, 1] < 0)[0],
+                return_counts=True,
+            )
+
+            # now loop over number of arrays and check how often it appears in the counter
+            # reference is 1, i.e. only on atom is below the COM. If 2, assign pi.
+            self.orientations_per_defect = np.asarray(
+                [
+                    0 if count_atoms_below_COM[defect] == 1 else np.pi
+                    for defect in np.arange(self.defective_atoms_ids_clustered.shape[0])
+                ]
             )
 
     def compute_local_environments_geometry(

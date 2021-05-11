@@ -160,6 +160,18 @@ class TestSimulationGetOrientationsOfDefects:
 
         assert len(simulation.orientations_per_defect) == 12
 
+    def test_returns_correct_orientations_for_pristine(self):
+
+        path = "./files/trajectories/pristine/"
+
+        simulation = analysis.Simulation(path, "Pristine")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+
+        simulation.get_orientation_of_defects()
+
+        assert len(simulation.orientations_per_defect) == 12
+
 class TestSimulationComputeLocalEnvironmentsGeometry:
     def test_returns_correct_geometries_for_divacancy(self):
 
