@@ -63,6 +63,18 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
 
         assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
 
+    def test_returns_correct_ids_for_divacancy_COM(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.0, COM_as_reference = True)
+        
+        assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
+
     def test_returns_correct_ids_for_pristine(self):
 
         path = "./files/trajectories/pristine/"

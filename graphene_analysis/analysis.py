@@ -7,6 +7,7 @@ from ovito.io import import_file
 from ovito.modifiers import *
 
 import MDAnalysis as mdanalysis
+from MDAnalysis.lib.distances import capped_distance
 from ase.visualize import view
 
 sys.path.append("../")
@@ -455,11 +456,13 @@ class Simulation:
     def find_atoms_around_defects_within_cutoff(
         self,
         cutoff: float = 2.0,
+        COM_as_reference: bool = False,
     ):
         """
         Get atom ids of defects in 'close' proximity to the defect center.
         Arguments:
                 cutoff (float): cutoff in angstroms within atoms will be assigned to the defect.
+                COM_as_reference (bool): Radial cutoff applied from defect COM.
         Returns:
         """
 
@@ -468,23 +471,45 @@ class Simulation:
         # Create a temporary Universe based on pdb file only.
         universe_flat_configuration = mdanalysis.Universe(self.path_to_topology)
 
-        # Now use feature from MDAnalysis. This will be used to check the adjacent atoms
-        scan_neighbors = mdanalysis.lib.NeighborSearch.AtomNeighborSearch(
-            universe_flat_configuration.atoms, self.topology.cell.cellpar()
-        )
+        # check if COM_as_reference is turned on.
+        if COM_as_reference:
 
-        # Now loop over all defects which were previously assigned and find all atom ids
-        # within the cutoff specfied (default 2 angstroms)
-        self.atoms_ids_around_defects_clustered = np.array(
-            [
-                scan_neighbors.search(
-                    universe_flat_configuration.atoms[defective_atoms_per_defect],
-                    cutoff,
-                    "A",
-                ).indices
-                for defective_atoms_per_defect in self.defective_atoms_ids_clustered
-            ]
-        )
+            # compute COMs
+            COMs_all_defects = self.get_center_of_mass_of_defects()
+            
+            # Now loop over all defect centers and find atoms within distance
+            self.atoms_ids_around_defects_clustered = np.array(
+                [   np.unique(
+                    capped_distance(
+                        COM_of_defect,
+                        universe_flat_configuration.atoms.positions,
+                        cutoff,
+                        box=universe_flat_configuration.dimensions,
+                        return_distances = False
+                    ))[1::]
+                    for COM_of_defect in COMs_all_defects
+                ]
+            )
+
+
+        else:
+            # Now use feature from MDAnalysis. This will be used to check the adjacent atoms
+            scan_neighbors = mdanalysis.lib.NeighborSearch.AtomNeighborSearch(
+                universe_flat_configuration.atoms, self.topology.cell.cellpar()
+            )
+
+            # Now loop over all defects which were previously assigned and find all atom ids
+            # within the cutoff specfied (default 2 angstroms)
+            self.atoms_ids_around_defects_clustered = np.array(
+                [
+                    scan_neighbors.search(
+                        universe_flat_configuration.atoms[defective_atoms_per_defect],
+                        cutoff,
+                        "A",
+                    ).indices
+                    for defective_atoms_per_defect in self.defective_atoms_ids_clustered
+                ]
+            )
 
     def get_center_of_mass_of_defects(
         self, atoms_at_given_frame=None, dimensions_at_given_frame=None
