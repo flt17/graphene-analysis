@@ -476,21 +476,20 @@ class Simulation:
 
             # compute COMs
             COMs_all_defects = self.get_center_of_mass_of_defects()
-            
+
             # Now loop over all defect centers and find atoms within distance
             self.atoms_ids_around_defects_clustered = np.array(
-                [   np.unique(
+                [
                     capped_distance(
                         COM_of_defect,
                         universe_flat_configuration.atoms.positions,
                         cutoff,
                         box=universe_flat_configuration.dimensions,
-                        return_distances = False
-                    ))[1::]
+                        return_distances=False,
+                    )[:, 1]
                     for COM_of_defect in COMs_all_defects
                 ]
             )
-
 
         else:
             # Now use feature from MDAnalysis. This will be used to check the adjacent atoms
