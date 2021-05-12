@@ -2,6 +2,7 @@ import numpy as np
 import os
 import pytest
 import sys
+from ase.visualize import view
 
 
 #sys.path.append("../")
@@ -71,9 +72,32 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
         simulation.read_in_simulation_data()
         simulation.find_defective_atoms()
 
-        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.0, COM_as_reference = True)
-        
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
+
         assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
+
+    def test_returns_correct_ids_for_stone_wales(self):
+
+        path = "./files/trajectories/stone-wales_12/"
+
+        simulation = analysis.Simulation(path, "Stone-Wales 12")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=2.0)
+        assert simulation.atoms_ids_around_defects_clustered.shape[0] == 12
+
+    def test_returns_correct_ids_for_stone_wales_COM(self):
+
+        path = "./files/trajectories/stone-wales_12/"
+
+        simulation = analysis.Simulation(path, "Stone-Wales 12")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
+        
+        assert simulation.atoms_ids_around_defects_clustered.shape[0] == 12
 
     def test_returns_correct_ids_for_pristine(self):
 
@@ -84,8 +108,20 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
         simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
 
         simulation.find_atoms_around_defects_within_cutoff(cutoff=2.0)
-    
+        
         assert simulation.atoms_ids_around_defects_clustered.shape[1] == 19
+
+    def test_returns_correct_ids_for_pristine_COM(self):
+
+        path = "./files/trajectories/pristine/"
+
+        simulation = analysis.Simulation(path, "Pristine")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+
+        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
+        
+        assert simulation.atoms_ids_around_defects_clustered.shape[1] == 25
 
 
 class TestSimulationSampleAtomicHeightDistribution:
