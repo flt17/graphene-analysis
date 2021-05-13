@@ -391,40 +391,67 @@ class Simulation:
 
             # we will do a cluster grow around each atom
             # assign atom id as newly added neighbour
-            new_neighbors = atom_id
+            new_neighbors = count
 
+            number_previous_neighbors = 0
             # define variable to check if there are any new additions pro step
-            new_additions = 1
+            additions = 1
 
             # allocate array
             all_neighbors_per_defect = []
 
             # continue as long as new atoms are found
-            while new_additions > 0:
+            while additions > 0:
 
                 # find all atoms around new neighbors (or all neighbors) within 3A
-                new_neighbors = capped_distance(
-                        universe_flat_configuration.atoms.positions[new_neighbors],
-                        universe_flat_configuration.atoms[self.defective_atoms_ids].positions,
-                        3,
+                potential_new_neighbors = np.unique(
+                    capped_distance(
+                        universe_flat_configuration.atoms.positions[
+                            self.defective_atoms_ids[new_neighbors]
+                        ],
+                        universe_flat_configuration.atoms[
+                            self.defective_atoms_ids
+                        ].positions,
+                        2.8,
                         box=universe_flat_configuration.dimensions,
                         return_distances=False,
                     )[:, 1]
+                )
 
-                # check which new neighbors are not saved yet
-                unique_values = np.setdiff1d(self.defective_atoms_ids[new_neighbors],all_neighbors_per_defect)
-                new_additions = len(unique_values)
+                # now compute distances between chosen neighbors and potential neighbors
+                pairs, distances = capped_distance(
+                    universe_flat_configuration.atoms[
+                        self.defective_atoms_ids[potential_new_neighbors]
+                    ].positions,
+                    universe_flat_configuration.atoms[
+                        self.defective_atoms_ids[potential_new_neighbors]
+                    ].positions,
+                    200,
+                    box=universe_flat_configuration.dimensions,
+                    return_distances=True,
+                )
 
-                # check numbers of new neighbors
-                all_neighbors_per_defect.extend(unique_values)
-                new_neighbors = all_neighbors_per_defect
-            
+                # new neighbors are those having at least two neighbors close by
+                new_neighbors = potential_new_neighbors[
+                    np.where(
+                        np.sort(distances.reshape((len(potential_new_neighbors), -1)))[
+                            :, 2
+                        ]
+                        < 2.8
+                    )
+                ]
+
+                additions = len(new_neighbors) - number_previous_neighbors
+                number_previous_neighbors = len(new_neighbors)
+
             clusters_around_defective_atoms.append(new_neighbors)
 
-        defective_atoms_ids_clustered = np.unique(np.sort(np.array(clusters_around_defective_atoms)), axis=0)
+        defective_atoms_ids_clustered = np.unique(
+            np.array(self.defective_atoms_ids[clusters_around_defective_atoms]), axis=0
+        )
 
-        if (
-            defective_atoms_ids_clustered.shape[1] != allowed_atoms_per_type.get(self.defect_type)
+        if defective_atoms_ids_clustered.shape[1] != allowed_atoms_per_type.get(
+            self.defect_type
         ):
             raise UnphysicalValue(
                 f"From system name I guessed you are dealing with {self.defect_type} defects.",

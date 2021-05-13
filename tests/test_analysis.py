@@ -241,6 +241,7 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
         )
 
         simulation.find_defective_atoms()
+        
         simulation.find_atoms_around_defects_within_cutoff()
 
         success_rate = simulation.compute_local_environments_geometry()
