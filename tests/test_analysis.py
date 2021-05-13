@@ -20,6 +20,15 @@ class TestSimulationReadInSimulationData:
 
 
 class TestSimulationFindDefectiveAtoms:
+    def test_returns_correct_ids_for_abundance_of_divacancy(self):
+
+        path = "./files/trajectories/divacancy_54/"
+
+        simulation = analysis.Simulation(path, "Divacancy 54")
+        simulation.read_in_simulation_data()
+        simulation.find_defective_atoms()
+
+        assert len(simulation.defective_atoms_ids) % 12 == 0
     def test_returns_correct_ids_for_divacancy(self):
 
         path = "./files/trajectories/divacancy_36/"
@@ -29,6 +38,7 @@ class TestSimulationFindDefectiveAtoms:
         simulation.find_defective_atoms()
 
         assert len(simulation.defective_atoms_ids) % 12 == 0
+
 
     def test_returns_error_due_to_wrong_system_name(self):
 

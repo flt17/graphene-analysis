@@ -380,35 +380,59 @@ class Simulation:
                 f"However, I found {len(self.defective_atoms_ids)} defective atoms which cannot be properly divided.",
             )
 
-        # if everything worked we can continue clustering the atoms
-        # start by computing vectors between all defective atoms
-        vectors_between_atoms = (
-            self.topology[self.defective_atoms_ids].positions[np.newaxis, :]
-            - self.topology[self.defective_atoms_ids].positions[:, np.newaxis]
-        )
+        # define local universe of topology
+        universe_flat_configuration = mdanalysis.Universe(self.path_to_topology)
 
-        # apply MIC
-        vectors_MIC = utils.apply_minimum_image_convention_to_interatomic_vectors(
-            vectors_between_atoms, self.topology.cell
-        )
+        # variable to save all clusters in
+        clusters_around_defective_atoms = []
 
-        # get distances based on vectors
-        distances = np.linalg.norm(vectors_MIC, axis=2)
+        # now loop over defective atoms ids
+        for count, atom_id in enumerate((self.defective_atoms_ids)):
 
-        # sort distances and only take the first N elements and only once
-        indices_assigned = np.unique(
-            (
-                np.sort(
-                    np.argsort(distances)[
-                        :, 0 : allowed_atoms_per_type.get(self.defect_type)
-                    ]
-                )
-            ),
-            axis=0,
-        )
+            # we will do a cluster grow around each atom
+            # assign atom id as newly added neighbour
+            new_neighbors = atom_id
 
-        # use this indices to get atom ids from defective atoms
-        self.defective_atoms_ids_clustered = self.defective_atoms_ids[indices_assigned]
+            # define variable to check if there are any new additions pro step
+            new_additions = 1
+
+            # allocate array
+            all_neighbors_per_defect = []
+
+            # continue as long as new atoms are found
+            while new_additions > 0:
+
+                # find all atoms around new neighbors (or all neighbors) within 3A
+                new_neighbors = capped_distance(
+                        universe_flat_configuration.atoms.positions[new_neighbors],
+                        universe_flat_configuration.atoms[self.defective_atoms_ids].positions,
+                        3,
+                        box=universe_flat_configuration.dimensions,
+                        return_distances=False,
+                    )[:, 1]
+
+                # check which new neighbors are not saved yet
+                unique_values = np.setdiff1d(self.defective_atoms_ids[new_neighbors],all_neighbors_per_defect)
+                new_additions = len(unique_values)
+
+                # check numbers of new neighbors
+                all_neighbors_per_defect.extend(unique_values)
+                new_neighbors = all_neighbors_per_defect
+            
+            clusters_around_defective_atoms.append(new_neighbors)
+
+        defective_atoms_ids_clustered = np.unique(np.sort(np.array(clusters_around_defective_atoms)), axis=0)
+
+        if (
+            defective_atoms_ids_clustered.shape[1] != allowed_atoms_per_type.get(self.defect_type)
+        ):
+            raise UnphysicalValue(
+                f"From system name I guessed you are dealing with {self.defect_type} defects.",
+                f"Each {self.defect_type} is formed by {allowed_atoms_per_type.get(self.defect_type)} atoms.",
+                f"Something, however, went wrong in clustering the atoms per defect.",
+            )
+
+        self.defective_atoms_ids_clustered = defective_atoms_ids_clustered
 
     def sample_atomic_height_distribution(
         self, start_time: int = None, end_time: int = None, frame_frequency: int = None
