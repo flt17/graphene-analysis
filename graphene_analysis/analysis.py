@@ -446,9 +446,9 @@ class Simulation:
 
             clusters_around_defective_atoms.append(new_neighbors)
 
-        defective_atoms_ids_clustered = np.unique(
-            np.array(self.defective_atoms_ids[clusters_around_defective_atoms]), axis=0
-        )
+        defective_atoms_ids_clustered = self.defective_atoms_ids[
+            np.unique(clusters_around_defective_atoms, axis=0)
+        ]
 
         if defective_atoms_ids_clustered.shape[1] != allowed_atoms_per_type.get(
             self.defect_type
