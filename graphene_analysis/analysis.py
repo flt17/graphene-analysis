@@ -504,6 +504,45 @@ class Simulation:
         # save array format as numpy array to class
         self.atomic_height_distribution = np.array(atomic_heights)
 
+    def sample_lattice_parameter(
+        self, supercell_x_replica: int = 60, start_time: int = None, end_time: int = None, frame_frequency: int = None
+    ):
+        """
+        Sample the atomic heights of the graphene sheet relativ to the COM.
+        Arguments:
+            supercell_x_replica (int): Number of unit cell replica in x direction
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # define local variable to save lattice parameter
+        lattice_parameter = []
+
+        # Loop over trajectory
+        for count_frames, frames in enumerate(
+            tqdm(
+                (tmp_universe.trajectory[start_frame:end_frame])[
+                    :: int(frame_frequency)
+                ]
+            )
+        ):
+
+            # compute lattice parameter per frame
+            lattice_parameter.append(frames.dimensions[0]/supercell_x_replica)
+
+        # save array format as numpy array to class
+        self.lattice_parameter = np.array(lattice_parameter)
+
     def find_atoms_around_defects_within_cutoff(
         self,
         cutoff: float = 2.0,
