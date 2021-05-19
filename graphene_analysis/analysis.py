@@ -985,3 +985,190 @@ class Simulation:
         )
 
         return fitting_success_rate
+
+
+    def compute_height_autocorrelation_function(
+        self,
+        correlation_time: float,
+        number_of_blocks: int,
+        start_time: int = None,
+        end_time: int = None,
+        frame_frequency: int = None,
+    ):
+        """
+        Compute height autocorrelation function (HACF).
+        Arguments:
+            correlation_time (float): Time (in fs) for which we will trace the movement of the atoms.
+            number_of_blocks (int): Number of blocks used for block average of VACF.
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # convert correlation_time to correlation_frames taken into account the time between frames and
+        # the frame frequency
+        number_of_correlation_frames = int(
+            correlation_time / self.time_between_frames / frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # check if correlation time can be obtained with current trajectory:
+        number_of_samples = len((tmp_universe.trajectory[start_frame:end_frame])[
+                    ::frame_frequency
+                ])
+
+        if number_of_correlation_frames >= number_of_samples:
+            raise UnphysicalValue(
+                f" You want to compute a correlation based on {number_of_correlation_frames} frames."
+                f"However, the provided trajectory will only be analysed for {number_of_samples} frames.",
+                f" Please adjust your correlation or sampling times or run longer trajectories.",
+            )
+
+
+        # allocate array for length of number_of_correlation_frames
+        HACF = np.zeros(number_of_correlation_frames)
+        # allocate array for number of samples per correlation frame
+        number_of_samples_correlated = np.zeros(number_of_correlation_frames)
+        # allocate array for blocks for statistical error analysis
+        HACF_block = np.zeros(
+            (number_of_blocks, number_of_correlation_frames)
+        )
+
+        # define how many samples are evaluated per block
+        number_of_samples_per_block = math.ceil(number_of_samples / number_of_blocks)
+        index_current_block_used = 0
+
+        # make sure that each block can reach full correlation time
+        if number_of_samples_per_block < number_of_correlation_frames:
+            raise UnphysicalValue(
+                f" Your chosen number of blocks ({number_of_blocks}) is not allowed as:",
+                f"samples per block ({number_of_samples_per_block}) < correlation frames {number_of_correlation_frames}.",
+                f"Please reduce the number of blocks or run longer trajectories.",
+            )
+
+
+
+        # allocate array for all velocities of all selected atoms for all frames sampled
+        saved_heights_per_frame = np.zeros(
+            (number_of_samples, self.topology.get_global_number_of_atoms())
+        )
+
+
+        # Loop over trajectory to sample all heights of all atoms
+        for count_frames, frames in enumerate(
+            tqdm(
+                (tmp_universe.trajectory[start_frame:end_frame])[
+                    ::frame_frequency
+                ]
+            )
+        ):
+            # compute center of mass of system
+            center_of_mass_z = tmp_universe.atoms.center_of_geometry()[2]
+
+            # now save heights to array
+            saved_heights_per_frame[count_frames] = tmp_universe.atoms.positions[:,2]-center_of_mass_z
+
+        
+        # Loop over saved heights
+        for frame, heights_per_frame in enumerate(
+            tqdm(saved_heights_per_frame)
+        ):
+
+            # compute last frame sampled, i.e. usually frame+correlation frames
+            last_correlation_frame = frame + number_of_correlation_frames
+            if last_correlation_frame > number_of_samples - 1:
+                last_correlation_frame = number_of_samples
+
+            # define variable to save how many frames where used for correlation
+            number_of_frames_correlated = last_correlation_frame - frame
+
+            # increment which correlation frames were sampled
+            number_of_samples_correlated[0:number_of_frames_correlated] += 1
+            
+            # compute autocorrelation function per frame
+            HACF_per_frame =np.sum(
+                    saved_heights_per_frame[frame]
+                    * saved_heights_per_frame[frame:last_correlation_frame],
+                  axis=1
+                )/self.topology.get_global_number_of_atoms()
+
+            # add to variable for ensemble average
+            HACF[
+                0:number_of_frames_correlated
+            ] += HACF_per_frame
+
+            # to get insight on the statistical error we compute block averages
+            HACF_block[
+                index_current_block_used, 0:number_of_frames_correlated
+            ] += HACF_per_frame
+
+            # close block when number of samples per block are reached
+            if (
+                frame + 1
+                >= (index_current_block_used + 1) * number_of_samples_per_block
+                or frame + 1 == number_of_samples
+            ):
+                # initialise with 0
+                number_of_samples_correlated_per_block = 0
+                # check how many samples per frame were taken for this block
+                if index_current_block_used == 0:
+                    # in first block this corresponds to the global number of samples correlated
+                    number_of_samples_correlated_per_block = (
+                        number_of_samples_correlated
+                    )
+                else:
+
+                    # in all others we just need to get the difference between current and previous global samples
+                    number_of_samples_correlated_per_block = (
+                        number_of_samples_correlated
+                        - previous_global_number_of_samples_correlated
+                    )
+
+                # average current block
+                HACF_block[
+                    index_current_block_used, :
+                ] = (
+                    HACF_block[
+                        index_current_block_used, :
+                    ]
+                    / number_of_samples_correlated_per_block
+                )
+
+                # define previous global number of samples
+                previous_global_number_of_samples_correlated = (
+                    number_of_samples_correlated.copy()
+                )
+
+                # increment index to move to next block
+                index_current_block_used += 1
+                
+        # get average autocorrelation
+        HACF = (
+            HACF / number_of_samples_correlated
+        )
+
+        # compute statistical error based on block averages
+        std_HACF = np.std(
+            HACF_block, axis=0
+        )
+
+        # save all data to dictionary of class
+        string_for_dict = f"ct: {correlation_time}"
+        self.HACF[string_for_dict] = [
+            np.arange(number_of_correlation_frames)
+            * time_between_frames
+            * frame_frequency,
+            HACF,
+            std_HACF,
+        ]
+
+

@@ -5,7 +5,7 @@ import sys
 from ase.visualize import view
 
 
-#sys.path.append("../")
+# sys.path.append("../")
 from graphene_analysis import analysis
 
 
@@ -29,6 +29,7 @@ class TestSimulationFindDefectiveAtoms:
         simulation.find_defective_atoms()
 
         assert len(simulation.defective_atoms_ids) % 12 == 0
+
     def test_returns_correct_ids_for_divacancy(self):
 
         path = "./files/trajectories/divacancy_36/"
@@ -38,7 +39,6 @@ class TestSimulationFindDefectiveAtoms:
         simulation.find_defective_atoms()
 
         assert len(simulation.defective_atoms_ids) % 12 == 0
-
 
     def test_returns_error_due_to_wrong_system_name(self):
 
@@ -56,7 +56,7 @@ class TestSimulationFindDefectiveAtoms:
 
         simulation = analysis.Simulation(path, "Pristine")
         simulation.read_in_simulation_data()
-        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects=12)
 
         assert len(simulation.defective_atoms_ids) % 12 == 0
 
@@ -82,7 +82,9 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
         simulation.read_in_simulation_data()
         simulation.find_defective_atoms()
 
-        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
+        simulation.find_atoms_around_defects_within_cutoff(
+            cutoff=4.5, COM_as_reference=True
+        )
 
         assert simulation.atoms_ids_around_defects_clustered.shape[0] == 36
 
@@ -105,8 +107,10 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
         simulation.read_in_simulation_data()
         simulation.find_defective_atoms()
 
-        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
-        
+        simulation.find_atoms_around_defects_within_cutoff(
+            cutoff=4.5, COM_as_reference=True
+        )
+
         assert simulation.atoms_ids_around_defects_clustered.shape[0] == 12
 
     def test_returns_correct_ids_for_pristine(self):
@@ -115,10 +119,10 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
 
         simulation = analysis.Simulation(path, "Pristine")
         simulation.read_in_simulation_data()
-        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects=12)
 
         simulation.find_atoms_around_defects_within_cutoff(cutoff=2.0)
-        
+
         assert simulation.atoms_ids_around_defects_clustered.shape[1] == 19
 
     def test_returns_correct_ids_for_pristine_COM(self):
@@ -127,10 +131,12 @@ class TestSimulationFindAtomsAroundDefectsWithinCutoff:
 
         simulation = analysis.Simulation(path, "Pristine")
         simulation.read_in_simulation_data()
-        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects=12)
 
-        simulation.find_atoms_around_defects_within_cutoff(cutoff=4.5, COM_as_reference = True)
-        
+        simulation.find_atoms_around_defects_within_cutoff(
+            cutoff=4.5, COM_as_reference=True
+        )
+
         assert simulation.atoms_ids_around_defects_clustered.shape[1] == 25
 
 
@@ -192,6 +198,7 @@ class TestSimulationGetCenterOfMassOfDefects:
         )
         assert COMs.shape == (36, 3)
 
+
 class TestSimulationGetOrientationsOfDefects:
     def test_returns_correct_orientations_for_divacancies(self):
 
@@ -223,11 +230,12 @@ class TestSimulationGetOrientationsOfDefects:
 
         simulation = analysis.Simulation(path, "Pristine")
         simulation.read_in_simulation_data()
-        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects=12)
 
         simulation.get_orientation_of_defects()
 
         assert len(simulation.orientations_per_defect) == 12
+
 
 class TestSimulationComputeLocalEnvironmentsGeometry:
     def test_returns_correct_geometries_for_divacancy(self):
@@ -241,7 +249,7 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
         )
 
         simulation.find_defective_atoms()
-        
+
         simulation.find_atoms_around_defects_within_cutoff()
 
         success_rate = simulation.compute_local_environments_geometry()
@@ -263,7 +271,6 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
         success_rate = simulation.compute_local_environments_geometry()
         assert success_rate > 90
 
-
     def test_returns_correct_geometries_for_pristine(self):
 
         path = "./files/trajectories/pristine/"
@@ -274,10 +281,27 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
             start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
         )
 
-        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects= 12)
+        simulation.find_defective_atoms(pristine=True, number_of_artificial_defects=12)
         simulation.find_atoms_around_defects_within_cutoff()
 
         success_rate = simulation.compute_local_environments_geometry()
-        
+
         assert success_rate > 90
+
+
+class TestComputeHeightAutoCorrelationFunction:
+    def test_returns_raises_error_for_too_large_correlation_time(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        with pytest.raises(analysis.UnphysicalValue):        
+            simulation.compute_height_autocorrelation_function(
+                correlation_time=50000, number_of_blocks=2
+            )
 
