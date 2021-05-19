@@ -1165,7 +1165,7 @@ class Simulation:
         string_for_dict = f"ct: {correlation_time}"
         self.HACF[string_for_dict] = [
             np.arange(number_of_correlation_frames)
-            * time_between_frames
+            * self.time_between_frames
             * frame_frequency,
             HACF,
             std_HACF,
