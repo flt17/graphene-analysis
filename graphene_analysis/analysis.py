@@ -75,6 +75,7 @@ class Simulation:
         self.defect_type = "Pristine"
         self.directory_path = directory_path
         self.time_between_frames = None
+        self.HACF = {}
         # set system periodicity per default:
         self.set_pbc_dimensions("xyz")
 
