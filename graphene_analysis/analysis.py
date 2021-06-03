@@ -506,7 +506,11 @@ class Simulation:
         self.atomic_height_distribution = np.array(atomic_heights)
 
     def sample_lattice_parameter(
-        self, supercell_x_replica: int = 60, start_time: int = None, end_time: int = None, frame_frequency: int = None
+        self,
+        supercell_x_replica: int = 60,
+        start_time: int = None,
+        end_time: int = None,
+        frame_frequency: int = None,
     ):
         """
         Sample the atomic heights of the graphene sheet relativ to the COM.
@@ -539,7 +543,7 @@ class Simulation:
         ):
 
             # compute lattice parameter per frame
-            lattice_parameter.append(frames.dimensions[0]/supercell_x_replica)
+            lattice_parameter.append(frames.dimensions[0] / supercell_x_replica)
 
         # save array format as numpy array to class
         self.lattice_parameter = np.array(lattice_parameter)
@@ -866,6 +870,19 @@ class Simulation:
         jacobians = []
         hessians_eigenvalues = []
 
+        # save coefficients in extra array
+        coefficients = np.zeros(
+            (
+                len(
+                    (tmp_universe.trajectory[start_frame:end_frame])[
+                        :: int(frame_frequency)
+                    ]
+                ),
+                len(self.defective_atoms_ids_clustered),
+                6,
+            )
+        )
+
         # Loop over trajectory
         for count_frames, frames in enumerate(
             tqdm(
@@ -945,6 +962,7 @@ class Simulation:
 
             # now check where r2 scores satisfy criterion
             black_sheep_indices = np.where(r2_scores_per_defect < r2_score_criterion)[0]
+            accepted = np.where(r2_scores_per_defect >= r2_score_criterion)[0]
 
             # update counter for fit failures
             count_fit_fail += len(black_sheep_indices)
@@ -953,6 +971,11 @@ class Simulation:
             valid_coefficients = np.concatenate(
                 np.delete(fitting_data[:, 0], black_sheep_indices)
             ).reshape((-1, 6))
+
+            # save to array
+            coefficients[count_frames,accepted] = np.concatenate(fitting_data[:,0][accepted]).reshape((-1,6))
+            coefficients[count_frames,black_sheep_indices] = np.nan
+
 
             # now compute Jacobian of analytical at defect center, i.e. [b,c]
             jacobians.extend(valid_coefficients[:, 1:3])
@@ -974,6 +997,7 @@ class Simulation:
 
         self.jacobians = np.asarray(jacobians)
         self.hessians_eigenvalues = np.asarray(hessians_eigenvalues)
+        self.coefficients_fh = coefficients
 
         # print successrate
         fitting_success_rate = (
@@ -986,7 +1010,6 @@ class Simulation:
         )
 
         return fitting_success_rate
-
 
     def compute_height_autocorrelation_function(
         self,
@@ -1007,7 +1030,6 @@ class Simulation:
         Returns:
         """
 
-
         # get information about sampling
         start_frame, end_frame, frame_frequency = self._get_sampling_frames(
             start_time, end_time, frame_frequency
@@ -1023,9 +1045,9 @@ class Simulation:
         tmp_universe = self.position_universe
 
         # check if correlation time can be obtained with current trajectory:
-        number_of_samples = len((tmp_universe.trajectory[start_frame:end_frame])[
-                    ::frame_frequency
-                ])
+        number_of_samples = len(
+            (tmp_universe.trajectory[start_frame:end_frame])[::frame_frequency]
+        )
 
         if number_of_correlation_frames >= number_of_samples:
             raise UnphysicalValue(
@@ -1034,15 +1056,12 @@ class Simulation:
                 f" Please adjust your correlation or sampling times or run longer trajectories.",
             )
 
-
         # allocate array for length of number_of_correlation_frames
         HACF = np.zeros(number_of_correlation_frames)
         # allocate array for number of samples per correlation frame
         number_of_samples_correlated = np.zeros(number_of_correlation_frames)
         # allocate array for blocks for statistical error analysis
-        HACF_block = np.zeros(
-            (number_of_blocks, number_of_correlation_frames)
-        )
+        HACF_block = np.zeros((number_of_blocks, number_of_correlation_frames))
 
         # define how many samples are evaluated per block
         number_of_samples_per_block = math.ceil(number_of_samples / number_of_blocks)
@@ -1056,33 +1075,25 @@ class Simulation:
                 f"Please reduce the number of blocks or run longer trajectories.",
             )
 
-
-
         # allocate array for all velocities of all selected atoms for all frames sampled
         saved_heights_per_frame = np.zeros(
             (number_of_samples, self.topology.get_global_number_of_atoms())
         )
 
-
         # Loop over trajectory to sample all heights of all atoms
         for count_frames, frames in enumerate(
-            tqdm(
-                (tmp_universe.trajectory[start_frame:end_frame])[
-                    ::frame_frequency
-                ]
-            )
+            tqdm((tmp_universe.trajectory[start_frame:end_frame])[::frame_frequency])
         ):
             # compute center of mass of system
             center_of_mass_z = tmp_universe.atoms.center_of_geometry()[2]
 
             # now save heights to array
-            saved_heights_per_frame[count_frames] = tmp_universe.atoms.positions[:,2]-center_of_mass_z
+            saved_heights_per_frame[count_frames] = (
+                tmp_universe.atoms.positions[:, 2] - center_of_mass_z
+            )
 
-        
         # Loop over saved heights
-        for frame, heights_per_frame in enumerate(
-            tqdm(saved_heights_per_frame)
-        ):
+        for frame, heights_per_frame in enumerate(tqdm(saved_heights_per_frame)):
 
             # compute last frame sampled, i.e. usually frame+correlation frames
             last_correlation_frame = frame + number_of_correlation_frames
@@ -1094,18 +1105,19 @@ class Simulation:
 
             # increment which correlation frames were sampled
             number_of_samples_correlated[0:number_of_frames_correlated] += 1
-            
+
             # compute autocorrelation function per frame
-            HACF_per_frame =np.sum(
+            HACF_per_frame = (
+                np.sum(
                     saved_heights_per_frame[frame]
                     * saved_heights_per_frame[frame:last_correlation_frame],
-                  axis=1
-                )/self.topology.get_global_number_of_atoms()
+                    axis=1,
+                )
+                / self.topology.get_global_number_of_atoms()
+            )
 
             # add to variable for ensemble average
-            HACF[
-                0:number_of_frames_correlated
-            ] += HACF_per_frame
+            HACF[0:number_of_frames_correlated] += HACF_per_frame
 
             # to get insight on the statistical error we compute block averages
             HACF_block[
@@ -1135,12 +1147,8 @@ class Simulation:
                     )
 
                 # average current block
-                HACF_block[
-                    index_current_block_used, :
-                ] = (
-                    HACF_block[
-                        index_current_block_used, :
-                    ]
+                HACF_block[index_current_block_used, :] = (
+                    HACF_block[index_current_block_used, :]
                     / number_of_samples_correlated_per_block
                 )
 
@@ -1151,16 +1159,12 @@ class Simulation:
 
                 # increment index to move to next block
                 index_current_block_used += 1
-                
+
         # get average autocorrelation
-        HACF = (
-            HACF / number_of_samples_correlated
-        )
+        HACF = HACF / number_of_samples_correlated
 
         # compute statistical error based on block averages
-        std_HACF = np.std(
-            HACF_block, axis=0
-        )
+        std_HACF = np.std(HACF_block, axis=0)
 
         # save all data to dictionary of class
         string_for_dict = f"ct: {correlation_time}"
@@ -1171,5 +1175,3 @@ class Simulation:
             HACF,
             std_HACF,
         ]
-
-
