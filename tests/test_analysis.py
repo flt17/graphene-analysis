@@ -290,7 +290,7 @@ class TestSimulationComputeLocalEnvironmentsGeometry:
 
 
 class TestComputeHeightAutoCorrelationFunction:
-    def test_returns_raises_error_for_too_large_correlation_time(self):
+    def test_raises_error_for_too_large_correlation_time(self):
 
         path = "./files/trajectories/divacancy_36/"
 
@@ -304,4 +304,36 @@ class TestComputeHeightAutoCorrelationFunction:
             simulation.compute_height_autocorrelation_function(
                 correlation_time=50000, number_of_blocks=2
             )
+
+class TestComputeHeightCrossCorrelationFunction:
+    def test_raises_error_for_too_large_correlation_time(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+        with pytest.raises(analysis.UnphysicalValue):        
+            simulation.compute_height_crosscorrelation_function(
+                correlation_time=50000, number_of_blocks=2, number_of_atoms = 2, correlated_distance = 10
+            )
+
+    def test_returns_reasonable_values(self):
+
+        path = "./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 36")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+      
+        simulation.compute_height_crosscorrelation_function(
+                correlation_time=500, number_of_blocks=1, number_of_atoms = 2, correlated_distance = 10
+            )
+
+        assert len(simulation.HCCF.keys()) == 2
 
