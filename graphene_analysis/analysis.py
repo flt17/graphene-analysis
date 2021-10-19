@@ -974,9 +974,10 @@ class Simulation:
             ).reshape((-1, 6))
 
             # save to array
-            coefficients[count_frames,accepted] = np.concatenate(fitting_data[:,0][accepted]).reshape((-1,6))
-            coefficients[count_frames,black_sheep_indices] = np.nan
-
+            coefficients[count_frames, accepted] = np.concatenate(
+                fitting_data[:, 0][accepted]
+            ).reshape((-1, 6))
+            coefficients[count_frames, black_sheep_indices] = np.nan
 
             # now compute Jacobian of analytical at defect center, i.e. [b,c]
             jacobians.extend(valid_coefficients[:, 1:3])
@@ -1177,23 +1178,22 @@ class Simulation:
             std_HACF,
         ]
 
-
     def compute_height_crosscorrelation_function(
         self,
         correlation_time: float,
         number_of_blocks: int,
         number_of_atoms: int,
-        correlated_distance: float, 
+        correlated_distance: float,
         start_time: int = None,
         end_time: int = None,
         frame_frequency: int = None,
     ):
         """
-        Compute height crosscorrelation function (HCCF). 
+        Compute height crosscorrelation function (HCCF).
         Arguments:
             correlation_time (float): Time (in fs) for which we will trace the movement of the atoms.
             number_of_blocks (int): Number of blocks used for block average of HCCF.
-            number_of_atoms (int): Number of atoms (per atoms) used to compute the HCCF. 
+            number_of_atoms (int): Number of atoms (per atoms) used to compute the HCCF.
             correlated_distance (int): Minimum distance of ring used to choose number_of_atoms atoms.
             start_time (int) : Start time for analysis (optional).
             end_time (int) : End time for analysis (optional).
@@ -1243,19 +1243,25 @@ class Simulation:
 
         # create spherical layer atom group from which we will pick the atoms to correlate with
         spherical_layer_atom_groups = [
-                tmp_universe.select_atoms(f"sphlayer {correlated_distance} {correlated_distance+1} index {i}")
-                for i in np.arange(atoms_total)
-            ]
+            tmp_universe.select_atoms(
+                f"sphlayer {correlated_distance} {correlated_distance+1} index {i}"
+            )
+            for i in np.arange(atoms_total)
+        ]
 
         # define which atom is piqued for correlation this run
-        indices_picked_atoms = np.random.choice(np.arange(np.min([len(i) for i in (spherical_layer_atom_groups)])), number_of_atoms, replace=False)
+        indices_picked_atoms = np.random.choice(
+            np.arange(np.min([len(i) for i in (spherical_layer_atom_groups)])),
+            number_of_atoms,
+            replace=False,
+        )
 
         # dependent on the number of atoms, start loop
         for number_atom, correlated_atom in enumerate(indices_picked_atoms):
-            
 
-
-            atoms_to_be_correlated = np.sum([atoms[correlated_atom] for atoms in spherical_layer_atom_groups])
+            atoms_to_be_correlated = np.sum(
+                [atoms[correlated_atom] for atoms in spherical_layer_atom_groups]
+            )
 
             # allocate array for length of number_of_correlation_frames
             HCCF = np.zeros(number_of_correlation_frames)
@@ -1266,20 +1272,20 @@ class Simulation:
 
             index_current_block_used = 0
 
-
             # allocate array for all velocities of all selected atoms for all frames sampled
-            saved_heights_per_frame = np.zeros(
-                (number_of_samples, atoms_total)
-            )
+            saved_heights_per_frame = np.zeros((number_of_samples, atoms_total))
 
             # Loop over trajectory to sample all heights of all atoms
             for count_frames, frames in enumerate(
-                tqdm((tmp_universe.trajectory[start_frame:end_frame])[::frame_frequency])
+                tqdm(
+                    (tmp_universe.trajectory[start_frame:end_frame])[::frame_frequency]
+                )
             ):
                 # now save heights to array
                 saved_heights_per_frame[count_frames] = (
-                        tmp_universe.atoms.positions[:, 2] - atoms_to_be_correlated.positions[:,2]
-                    )
+                    tmp_universe.atoms.positions[:, 2]
+                    - atoms_to_be_correlated.positions[:, 2]
+                )
 
             # Loop over saved heights
             for frame, heights_per_frame in enumerate(tqdm(saved_heights_per_frame)):
@@ -1364,3 +1370,174 @@ class Simulation:
                 HCCF,
                 std_HCCF,
             ]
+
+    def compute_height_height_power_spectrum(
+        self,
+        ensemble: str = "NVT",
+        smooth_heights: bool = True,
+        number_q_points_x: int = 20,
+        number_q_points_y: int = 20,
+        start_time: int = None,
+        end_time: int = None,
+        frame_frequency: int = None,
+    ):
+        """
+        Compute power spectrum of height height correlation function.
+        Arguments:
+            ensemble (str): Whether simulations were performed in NVT or NPT.
+            smooth_heights (bool): Whether the heights should be smoothed by averaging over nearest neighbors (more expensive).
+            number_q_points_x (int): Multiples of unit q-vector in x direction.
+            number_q_points_y (int): Multiples of unit q-vector in y direction (or second in-plane direction).
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # so far only properly implemented for NVT ensemble.
+        if ensemble == "NVT":
+
+            # initialise some variables
+            tmp_universe = self.position_universe
+
+            # define reciprocal vectors in plane
+            b_x = (
+                2
+                * np.pi
+                * np.cross(self.topology.cell[1], self.topology.cell[2])
+                / (
+                    np.dot(
+                        self.topology.cell[0],
+                        np.cross(self.topology.cell[1], self.topology.cell[2]),
+                    )
+                )
+            )
+            b_y = (
+                2
+                * np.pi
+                * np.cross(self.topology.cell[2], self.topology.cell[0])
+                / (
+                    np.dot(
+                        self.topology.cell[1],
+                        np.cross(self.topology.cell[2], self.topology.cell[0]),
+                    )
+                )
+            )
+
+            # build q space sample vector
+            q_x = np.linspace(
+                (0, 0), b_x[:2] * number_q_points_x, number_q_points_x + 1
+            )
+            q_y = np.linspace(
+                (0, 0), b_y[:2] * number_q_points_y, number_q_points_y + 1
+            )
+
+            q_vec = []
+            for m_x in q_x:
+                for m_y in q_y:
+                    q_vec.append(m_x + m_y)
+            q_vec = np.asarray(q_vec)
+            q_vec = np.delete(q_vec, 0, 0)
+
+            power_spectrum_height_height = np.zeros(q_vec.shape[0])
+
+            # separate loop for smoothing due to computational cost
+            if smooth_heights:
+                # get nearest neighbor of each atom.
+                spherical_layer_atom_groups = np.asarray(
+                    [
+                        tmp_universe.select_atoms(f"sphlayer 1 1.8 index {i}").indices
+                        for i in np.arange(self.topology.get_global_number_of_atoms())
+                    ]
+                )
+
+                # Loop over trajectory to sample all heights of all atoms
+                for count_frames, frames in enumerate(
+                    tqdm(
+                        (tmp_universe.trajectory[start_frame:end_frame])[
+                            ::frame_frequency
+                        ]
+                    )
+                ):
+
+                    # get COM of system
+                    COM = tmp_universe.atoms.center_of_geometry()
+
+                    # get in-plane coordinates in real space
+                    in_plane_coords_realspace = tmp_universe.atoms.positions[:, 0:2]
+
+                    # now apply smoothing for heights
+                    out_of_plane_coords_realspace = [
+                        0.5
+                        * (
+                            tmp_universe.atoms[i].position[2]
+                            + np.mean(
+                                tmp_universe.atoms[
+                                    spherical_layer_atom_groups[i]
+                                ].positions[:, 2]
+                            )
+                        )
+                        for i in np.arange(self.topology.get_global_number_of_atoms())
+                    ] - COM[2]
+
+                    fourier_transform = np.abs(
+                        np.dot(
+                            out_of_plane_coords_realspace,
+                            np.exp(-1j * np.dot(q_vec, in_plane_coords_realspace.T)).T,
+                        )
+                    )
+                    power_spectrum_height_height_per_frame = np.square(
+                        fourier_transform
+                    )
+
+                    # save in array
+                    power_spectrum_height_height += (
+                        power_spectrum_height_height_per_frame
+                    )
+
+            # no smoothing
+            else:
+
+                # Loop over trajectory to sample all heights of all atoms
+                for count_frames, frames in enumerate(
+                    tqdm(
+                        (tmp_universe.trajectory[start_frame:end_frame])[
+                            ::frame_frequency
+                        ]
+                    )
+                ):
+
+                    # get COM of system
+                    COM = tmp_universe.atoms.center_of_geometry()
+
+                    # get in-plane coordinates in real space
+                    in_plane_coords_realspace = tmp_universe.atoms.positions[:, 0:2]
+
+                    # now apply smoothing for heights
+                    out_of_plane_coords_realspace = (
+                        tmp_universe.atoms.positions[:, 2] - COM[2]
+                    )
+
+                    fourier_transform = np.abs(
+                        np.dot(
+                            out_of_plane_coords_realspace,
+                            np.exp(-1j * np.dot(q_vec, in_plane_coords_realspace.T)).T,
+                        )
+                    )
+                    power_spectrum_height_height_per_frame = np.square(
+                        fourier_transform
+                    )
+
+                    # save in array
+                    power_spectrum_height_height += (
+                        power_spectrum_height_height_per_frame
+                    )
+
+            self.power_spectrum_height_height_correlation = { "q-vectors": q_vec,
+                "power spectrum": power_spectrum_height_height / (count_frames + 1)
+            }
