@@ -1669,7 +1669,6 @@ class Simulation:
         self,
         tmp_universe,
         spherical_zone_atom_groups,
-        system_name,
         start_frame,
         end_frame,
         frame_frequency,
@@ -1679,14 +1678,13 @@ class Simulation:
         Arguments:
             tmp_universe : Position universe used.
             spherical_zone_atom_groups: Atoms around each atom.
-            system_name: Name of the system.
             start_frame (int) : Start frame for analysis (optional).
             end_frame (int) : End frame for analysis (optional).
             frame_frequency (int): Take every nth frame only (optional).
         Returns:
         """
 
-        if "Pristine" in system_name:
+        if "Pristine" in self.system:
             spatial_height_chunk = np.zeros(
                 (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
                 dtype=object,
