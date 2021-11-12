@@ -1583,8 +1583,8 @@ class Simulation:
 
         # parallelism:
         chunks_per_block = (
-            n_proc
-            if (len(frames_per_block[0]) / n_proc) < max_size_chunk
+            n_cores
+            if (len(frames_per_block[0]) / n_cores) < max_size_chunk
             else int(len(frames_per_block[0]) / max_size_chunk) + 1
         )
 
@@ -1641,7 +1641,7 @@ class Simulation:
             )
 
             # now we loop over the chunks, these will be computed in parallel
-            with Parallel(n_jobs=n_proc, verbose=20) as parallel:
+            with Parallel(n_jobs=n_cores, verbose=20) as parallel:
 
                 # now compute chunk average
                 spatial_height_chunk_averages = parallel(
