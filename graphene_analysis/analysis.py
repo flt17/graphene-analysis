@@ -1584,8 +1584,8 @@ class Simulation:
         # parallelism:
         chunks_per_block = (
             n_cores
-            if (len(frames_per_block[0]) / n_cores) < max_size_chunk
-            else int(len(frames_per_block[0]) / max_size_chunk) + 1
+            if (len(frames_per_block[0]) / n_cores) < max_len_chunk
+            else int(len(frames_per_block[0]) / max_len_chunk) + 1
         )
 
         # now define atom groups
