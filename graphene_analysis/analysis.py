@@ -1550,7 +1550,7 @@ class Simulation:
         self,
         n_cores: int,
         correlated_distance: int,
-        n_blocks: int = 5,
+        number_of_blocks: int = 5,
         max_len_chunk: int = 200,
         start_time: int = None,
         end_time: int = None,
@@ -1561,7 +1561,7 @@ class Simulation:
         Arguments:
             n_cores (int) : Number of cores (required).
             correlated_distance (float) : Distance to corrolate heights with in angstorms (required).
-            n_blocks (int) : Number of blocks for block averaging.
+            number_of_blocks (int) : Number of blocks for block averaging.
             max_len_chunk (int): Number of frames per chunk (depends on correlation length) (optional).
             start_time (int) : Start time for analysis (optional).
             end_time (int) : End time for analysis (optional).
