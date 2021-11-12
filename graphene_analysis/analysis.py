@@ -5,6 +5,9 @@ import sys, os
 from tqdm.notebook import tqdm
 from ovito.io import import_file
 from ovito.modifiers import *
+from joblib import Parallel, delayed
+import joblib
+
 
 import MDAnalysis as mdanalysis
 from MDAnalysis.lib.distances import capped_distance
@@ -1538,6 +1541,167 @@ class Simulation:
                         power_spectrum_height_height_per_frame
                     )
 
-            self.power_spectrum_height_height_correlation = { "q-vectors": q_vec,
-                "power spectrum": power_spectrum_height_height / (count_frames + 1)
+            self.power_spectrum_height_height_correlation = {
+                "q-vectors": q_vec,
+                "power spectrum": power_spectrum_height_height / (count_frames + 1),
             }
+
+    def compute_spatial_height_correlation_parallel(
+        self,
+        n_cores: int,
+        correlated_distance: int,
+        n_blocks: int = 5,
+        max_len_chunk: int = 200,
+        start_time: int = None,
+        end_time: int = None,
+        frame_frequency: int = None,
+    ):
+        """
+        Compute spatial height height correlation function running in parallel.
+        Arguments:
+            n_cores (int) : Number of cores (required).
+            correlated_distance (float) : Distance to corrolate heights with in angstorms (required).
+            n_blocks (int) : Number of blocks for block averaging.
+            max_len_chunk (int): Number of frames per chunk (depends on correlation length) (optional).
+            start_time (int) : Start time for analysis (optional).
+            end_time (int) : End time for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # block averaging
+        frames_per_block = np.array_split(
+            np.arange(start_frame, end_frame, frame_frequency), number_of_blocks
+        )
+        start_frame_per_block = np.array([block[0] for block in frames_per_block])
+        end_frame_per_block = np.append(start_frame_per_block[1::], np.array(end_frame))
+
+        # parallelism:
+        chunks_per_block = (
+            n_proc
+            if (len(frames_per_block[0]) / n_proc) < max_size_chunk
+            else int(len(frames_per_block[0]) / max_size_chunk) + 1
+        )
+
+        # now define atom groups
+        tmp_universe = self.position_universe
+        atoms_total = len(tmp_universe.atoms)
+        tmp_universe.trajectory[0]
+
+        # do some prework by computing atoms groups etc
+        # create spherical zone atom group from which we will pick the atoms to correlate with
+        spherical_zone_atom_groups = [
+            tmp_universe.select_atoms(f"sphzone {correlated_distance} (index {i})")
+            for i in np.arange(atoms_total)
+        ]
+
+        vectors_per_atom = np.asarray(
+            [
+                spherical_zone_atom_groups[atom].positions
+                - tmp_universe.atoms.positions[atom]
+                for atom in np.arange(atoms_total)
+            ]
+        )
+
+        distances_2D_per_atom = np.asarray(
+            [
+                np.linalg.norm(
+                    utils.apply_minimum_image_convention_to_interatomic_vectors(
+                        (vectors_per_atom[atom]),
+                        self.topology.cell,
+                    ),
+                    axis=1,
+                )
+                for atom in np.arange(atoms_total)
+            ]
+        )
+
+        # we will start now looping over the different blocks (they still run in serial)
+        spatial_height_block_average = []
+        for block_id in np.arange(start_frame_per_block.shape[0]):
+
+            start_frame_block = start_frame_per_block[block_id]
+            end_frame_block = end_frame_per_block[block_id]
+
+            # now we need to split each block into chunks
+            # the number of chunks is determined by the number of processors used
+            # and the memory we can afford
+            frames_per_chunk = np.array_split(
+                frames_per_block[block_id], chunks_per_block
+            )
+            start_frame_per_chunk = np.array([block[0] for block in frames_per_chunk])
+            end_frame_per_chunk = np.append(
+                start_frame_per_chunk[1::],
+                np.array(frames_per_chunk[-1][-1] + frame_frequency),
+            )
+
+            # now we loop over the chunks, these will be computed in parallel
+            with Parallel(n_jobs=n_proc, verbose=20) as parallel:
+
+                # now compute chunk average
+                spatial_height_chunk_averages = parallel(
+                    delayed(self._compute_spatial_height_per_chunk)(
+                        tmp_universe,
+                        spherical_zone_atom_groups,
+                        start_frame_per_chunk[chunk_id],
+                        end_frame_per_chunk[chunk_id],
+                        frame_frequency,
+                    )
+                    for chunk_id in np.arange(len(frames_per_chunk))
+                )
+
+                # average per block
+                spatial_height_block_average.append(
+                    np.sum(spatial_height_chunk_averages, axis=0)
+                    / len(frames_per_block[block_id])
+                )
+
+
+        return distances_2D_per_atom,spatial_height_block_average
+
+    def _compute_spatial_height_per_chunk(
+        self,
+        tmp_universe,
+        spherical_zone_atom_groups,
+        start_frame,
+        end_frame,
+        frame_frequency,
+    ):
+        """
+        Compute spatial height height correlation function per frame based on previous selection.
+        Arguments:
+            tmp_universe : Position universe used.
+            spherical_zone_atom_groups: Atoms around each atom.
+            start_frame (int) : Start frame for analysis (optional).
+            end_frame (int) : End frame for analysis (optional).
+            frame_frequency (int): Take every nth frame only (optional).
+        Returns:
+        """
+
+        spatial_height_chunk = np.zeros(
+            (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
+            dtype=object,
+        )
+
+        for count_frames, frames in enumerate(
+            ((tmp_universe.trajectory[start_frame:end_frame])[::(frame_frequency)])
+        ):
+
+            positions_in_spherical_zone = np.asarray(
+                [atoms.positions[:, 2] for atoms in spherical_zone_atom_groups]
+            )
+
+            spatial_height_chunk += np.square(
+                np.asarray(
+                    positions_in_spherical_zone
+                    - tmp_universe.atoms.positions[:, 2][:, np.newaxis],
+                    dtype=object,
+                )
+            )
+
+        return spatial_height_chunk
