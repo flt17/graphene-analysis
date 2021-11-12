@@ -1648,7 +1648,6 @@ class Simulation:
                     delayed(self._compute_spatial_height_per_chunk)(
                         tmp_universe,
                         spherical_zone_atom_groups,
-                        system_name,
                         start_frame_per_chunk[chunk_id],
                         end_frame_per_chunk[chunk_id],
                         frame_frequency,
