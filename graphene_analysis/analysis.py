@@ -1648,6 +1648,7 @@ class Simulation:
                     delayed(self._compute_spatial_height_per_chunk)(
                         tmp_universe,
                         spherical_zone_atom_groups,
+                        system_name,
                         start_frame_per_chunk[chunk_id],
                         end_frame_per_chunk[chunk_id],
                         frame_frequency,
@@ -1668,6 +1669,7 @@ class Simulation:
         self,
         tmp_universe,
         spherical_zone_atom_groups,
+        system_name,
         start_frame,
         end_frame,
         frame_frequency,
@@ -1677,16 +1679,27 @@ class Simulation:
         Arguments:
             tmp_universe : Position universe used.
             spherical_zone_atom_groups: Atoms around each atom.
+            system_name: Name of the system.
             start_frame (int) : Start frame for analysis (optional).
             end_frame (int) : End frame for analysis (optional).
             frame_frequency (int): Take every nth frame only (optional).
         Returns:
         """
 
-        spatial_height_chunk = np.zeros(
-            (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
-            dtype=object,
-        )
+        if "Pristine" in system_name:
+            spatial_height_chunk = np.zeros(
+                (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
+                dtype=object,
+            )
+        else:
+            spatial_height_chunk = np.asarray(
+                        [
+                            spherical_zone_atom_groups[atom].positions[:, 2]
+                            - tmp_universe.atoms.positions[atom, 2]
+                            for atom in np.arange(atoms_total)
+                        ],
+                        dtype=object
+                    )
 
         for count_frames, frames in enumerate(
             ((tmp_universe.trajectory[start_frame:end_frame])[::(frame_frequency)])
