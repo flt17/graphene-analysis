@@ -1693,7 +1693,7 @@ class Simulation:
                         [
                             spherical_zone_atom_groups[atom].positions[:, 2]
                             - tmp_universe.atoms.positions[atom, 2]
-                            for atom in np.arange(atoms_total)
+                            for atom in np.arange(len(tmp_universe.atoms))
                         ],
                         dtype=object
                     )
