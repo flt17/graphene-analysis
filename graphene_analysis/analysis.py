@@ -1683,20 +1683,23 @@ class Simulation:
         Returns:
         """
 
-        if "Pristine" in self.system:
-            spatial_height_chunk = np.zeros(
-                (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
-                dtype=object,
+        # if "Pristine" in self.system:
+        #     spatial_height_chunk = np.zeros(
+        #         (len(tmp_universe.atoms), len(spherical_zone_atom_groups[0])),
+        #         dtype=object,
+        #     )
+        # else:
+            # spatial_height_chunk = np.asarray(
+            #             [
+            #                 spherical_zone_atom_groups[atom].positions[:, 2]
+            #                 - tmp_universe.atoms.positions[atom, 2]
+            #                 for atom in np.arange(len(tmp_universe.atoms))
+            #             ],
+            #             dtype=object
+            #         )
+        spatial_height_chunk  = np.asarray(
+                [atoms.positions[:, 2] for atoms in spherical_zone_atom_groups]
             )
-        else:
-            spatial_height_chunk = np.asarray(
-                        [
-                            spherical_zone_atom_groups[atom].positions[:, 2]
-                            - tmp_universe.atoms.positions[atom, 2]
-                            for atom in np.arange(len(tmp_universe.atoms))
-                        ],
-                        dtype=object
-                    )
 
         for count_frames, frames in enumerate(
             ((tmp_universe.trajectory[start_frame:end_frame])[::(frame_frequency)])
