@@ -1697,8 +1697,12 @@ class Simulation:
             #             ],
             #             dtype=object
             #         )
-        spatial_height_chunk  = np.asarray(
-                [atoms.positions[:, 2] for atoms in spherical_zone_atom_groups]
+        spatial_height_chunk = np.asarray(
+                [
+                    np.zeros(len(spherical_zone_atom_groups[atom]))
+                    for atom in np.arange(len(tmp_universe.atoms))
+                ],
+                dtype=object,
             )
 
         for count_frames, frames in enumerate(
