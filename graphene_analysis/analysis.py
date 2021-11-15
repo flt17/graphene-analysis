@@ -1707,11 +1707,7 @@ class Simulation:
             )
 
             spatial_height_chunk += np.square(
-                np.asarray(
-                    positions_in_spherical_zone
-                    - tmp_universe.atoms.positions[:, 2][:, np.newaxis],
-                    dtype=object,
-                )
+                (positions_in_spherical_zone.T - tmp_universe.atoms.positions[:, 2]).T
             )
 
         return spatial_height_chunk
