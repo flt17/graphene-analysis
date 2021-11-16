@@ -337,3 +337,25 @@ class TestComputeHeightCrossCorrelationFunction:
 
         assert len(simulation.HCCF.keys()) == 2
 
+
+class TestComputeHeightAutoCorrelationFunctionParallel:
+    def test_computes_ACF(self):
+
+        path ="./files/trajectories/divacancy_36/"
+
+        simulation = analysis.Simulation(path, "Divacancy 2")
+        simulation.read_in_simulation_data()
+        simulation.set_sampling_times(
+            start_time=0, end_time=-1, frame_frequency=1, time_between_frames=100
+        )
+
+           
+        simulation.compute_height_autocorrelation_function_parallel(
+                n_cores=2, correlation_time=500, number_of_blocks=2
+            )
+
+        assert (simulation.HACF_para["ct: 500"])[1].shape[1] == 5
+
+
+        
+
