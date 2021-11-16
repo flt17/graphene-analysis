@@ -1796,7 +1796,6 @@ class Simulation:
             #     - start_frame_per_block[0]
             # ]
 
-
             # now we loop over the chunks, these will be computed in parallel
             with Parallel(n_jobs=n_cores, verbose=20, backend="threading") as parallel:
                 
@@ -1808,7 +1807,7 @@ class Simulation:
                         number_of_correlation_frames,
                         number_of_samples
                     )
-                    for frame in frames_per_block[block_id]
+                    for frame in frames_per_block[block_id]-frames_per_block[0][0]
                 )
 
 
