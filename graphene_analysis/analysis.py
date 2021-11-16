@@ -1760,15 +1760,13 @@ class Simulation:
         start_frame_per_block = np.array([block[0] for block in frames_per_block])
         end_frame_per_block = np.append(start_frame_per_block[1::], np.array(end_frame))
 
+
         if len(frames_per_block[-1]) < number_of_correlation_frames:
             raise UnphysicalValue(
                 f" Your chosen number of blocks ({number_of_blocks}) is not allowed as:",
                 f"samples per block ({len(frames_per_block[-1])}) < correlation frames {number_of_correlation_frames}.",
                 f"Please reduce the number of blocks or run longer trajectories.",
             )
-
-        # parallelism:
-        chunks_per_block = n_cores
 
         # save relative heights of all atoms in all frames (serial)
         saved_heights_per_frame = np.zeros(
@@ -1790,14 +1788,8 @@ class Simulation:
         autocorrelation_block_average = []
         for block_id in np.arange(start_frame_per_block.shape[0]):
 
-            # heights_to_be_correlated = saved_heights_per_frame[
-            #     start_frame_per_block[block_id]
-            #     - start_frame_per_block[0] : end_frame_per_block[block_id]
-            #     - start_frame_per_block[0]
-            # ]
-
             # now we loop over the chunks, these will be computed in parallel
-            with Parallel(n_jobs=n_cores, verbose=20, backend="threading") as parallel:
+            with Parallel(n_jobs=n_cores, verbose=1, backend="threading") as parallel:
                 
                 # now compute per frame
                 (output_per_frame) = parallel(
@@ -1807,8 +1799,9 @@ class Simulation:
                         number_of_correlation_frames,
                         number_of_samples
                     )
-                    for frame in frames_per_block[block_id]-frames_per_block[0][0]
+                    for frame in ((frames_per_block[block_id]-frames_per_block[0][0])/frame_frequency)
                 )
+
 
 
                 ACF_samples_reformated = np.sum(np.asarray(output_per_frame).T,axis=2)
@@ -1842,7 +1835,7 @@ class Simulation:
             number_of_samples : Number of samples to be analysed (frames).
         Returns:
         """
-
+        frame = int(frame)
         HACF_per_frame = np.zeros(number_of_correlation_frames)
 
         number_of_samples_correlated = np.zeros(number_of_correlation_frames)
