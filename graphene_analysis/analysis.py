@@ -1871,7 +1871,7 @@ class Simulation:
         """
         Compute height staticness.
         Arguments:
-            n_cores (int): Number of cores.
+            n_cores (int): Number of cores, used for making chunks.
             correlation_time (float): Time (in fs) for which we will trace the movement of the atoms.
             number_of_blocks (int): Number of blocks used for block average of HCCF.
             start_time (int) : Start time for analysis (optional).
@@ -1915,6 +1915,8 @@ class Simulation:
         start_frame_per_block = np.array([block[0] for block in frames_per_block])
         end_frame_per_block = np.append(start_frame_per_block[1::], np.array(end_frame))
 
+        # set chunks per block equals to number of cores
+        chunks_per_block = n_cores
 
         if len(frames_per_block[-1]) < number_of_correlation_frames:
             raise UnphysicalValue(
@@ -1942,71 +1944,87 @@ class Simulation:
         # now we can autocorrelate the heights for the blocks
         autocorrelation_block_average = []
         for block_id in np.arange(start_frame_per_block.shape[0]):
+        
+            # get start and end of block
+            start_frame_block = start_frame_per_block[block_id]
+            end_frame_block = end_frame_per_block[block_id]
+            
+            # now we need to split each block into chunks
+            # the number of chunks is determined by the number of processors used
+            # and the memory we can afford
+            frames_per_chunk = np.array_split(frames_per_block[block_id], chunks_per_block)
+            start_frame_per_chunk = np.array([block[0] for block in frames_per_chunk])
+            end_frame_per_chunk = np.append(
+                    start_frame_per_chunk[1::],
+                    np.array(frames_per_chunk[-1][-1] + frame_frequency)
+                    )
+
 
             # now we loop over the chunks, these will be computed in parallel
             with Parallel(n_jobs=n_cores, verbose=1, backend="threading") as parallel:
                 
                 # now compute per frame
                 (output_per_frame) = parallel(
-                    delayed(self._compute_autocorrelation_per_atom_per_frame)(
-                        frame,
+                    delayed(self._compute_autocorrelation_per_atom_per_chunk)(
                         saved_heights_per_frame,
+                        start_frame_per_chunk[chunk_id],
+                        end_frame_per_chunk[chunk_id],
                         number_of_correlation_frames,
                         number_of_samples
                     )
-                    for frame in ((frames_per_block[block_id]-frames_per_block[0][0])/frame_frequency)
-                )
-
-
-
-                ACF_samples_reformated = np.sum(np.asarray(output_per_frame).T,axis=2)
-                # average per block
-                autocorrelation_block_average.append(
-                    ACF_samples_reformated[:,0]
-                    / ACF_samples_reformated[:,1]
-                )
+                    for chunk_id in np.arange(len(frames_per_chunk))
+                    )
+            
+            # get number of samples per step for each chunk
+            n_samples_per_step = np.sum(
+                np.asarray([h[1] for h in output_per_frame]), axis=0
+                )      
+            
+            # append correlation function and normalise per block
+            autocorrelation_block_average.append(np.sum(np.asarray([h[0] for h in output_per_frame]), axis=0) / n_samples_per_step[:, None])
 
 
         string_for_dict = f"ct: {correlation_time}"
         self.HACF_per_atom_para = {}
         self.HACF_per_atom_para[string_for_dict] = np.asarray([np.arange(number_of_correlation_frames)*self.time_between_frames*frame_frequency, np.asarray(autocorrelation_block_average)])
 
-
-
-    def _compute_autocorrelation_per_atom_per_frame(
+    def _compute_autocorrelation_per_atom_per_chunk(
         self,
-        frame,
         heights_per_frame,
+        start_frame,
+        end_frame,
         number_of_correlation_frames,
-        number_of_samples
-
+        number_of_samples,
     ):
         """
-        Compute autocorrelation function per frame based on previous selection.
+        Compute autocorrelation function per atom for a chunk of frames.
         Arguments:
-            frame: Current frame
-            saved_heights_per_frame : Position universe used.
+            heights_per_frame : Position universe used.
+            start_frame: integer with first frame of the chunk.
+            end_frame: integer with last frame of the chunk.
             number_of_correlation_frames : Number of frames to be autocorrelated.
             number_of_samples : Number of samples to be analysed (frames).
         Returns:
         """
-        frame = int(frame)
-        HACF_per_atom_per_frame = np.zeros((self.topology.get_global_number_of_atoms(),number_of_correlation_frames))
+        
+        HACF_per_atom_per_chunk = np.zeros((number_of_correlation_frames,self.topology.get_global_number_of_atoms()))
 
         number_of_samples_correlated = np.zeros(number_of_correlation_frames)
 
-        last_correlation_frame = frame + number_of_correlation_frames
-        if last_correlation_frame > number_of_samples - 1:
+        #loop over frames in chunk
+        for frame in np.arange(start_frame, end_frame):
+
+            last_correlation_frame = frame + number_of_correlation_frames
+            if last_correlation_frame > number_of_samples - 1:
                 last_correlation_frame = number_of_samples
 
-        number_of_frames_correlated = last_correlation_frame - frame
-        number_of_samples_correlated [0:number_of_frames_correlated] +=1 
+            number_of_frames_correlated = last_correlation_frame - frame
+            number_of_samples_correlated [0:number_of_frames_correlated] +=1 
         
-        # compute autocorrelation function per frame
-        HACF_per_frame[:, 0:number_of_frames_correlated] += (
+            # compute autocorrelation function per frame
+            HACF_per_atom_per_chunk[0:number_of_frames_correlated,:] += (
                     heights_per_frame[frame]
-                    * heights_per_frame[frame:last_correlation_frame],
-                    axis=1,
+                    * heights_per_frame[frame:last_correlation_frame]
                 )
 
-        return np.asarray([HACF_per_frame, number_of_samples_correlated])
+        return HACF_per_atom_per_chunk, number_of_samples_correlated

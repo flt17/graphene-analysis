@@ -162,7 +162,6 @@ def apply_minimum_image_convention_to_interatomic_vectors(
 
     # for the monoclinic cell it is important that we start with the tilted vector:
     for dim in [1, 0]:
-
         vectors[
             np.where(np.take(vectors, dim, axis=-1) > lattice_vectors[dim][dim] / 2)
         ] -= lattice_vectors[dim]
