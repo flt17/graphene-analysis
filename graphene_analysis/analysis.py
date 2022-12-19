@@ -1953,11 +1953,11 @@ class Simulation:
             # the number of chunks is determined by the number of processors used
             # and the memory we can afford
             frames_per_chunk = np.array_split(frames_per_block[block_id], chunks_per_block)
-            start_frame_per_chunk = np.array([block[0] for block in frames_per_chunk])
+            start_frame_per_chunk = np.array([block[0] for block in frames_per_chunk])-start_frame
             end_frame_per_chunk = np.append(
                     start_frame_per_chunk[1::],
                     np.array(frames_per_chunk[-1][-1] + frame_frequency)
-                    )
+                    )-start_frame
 
 
             # now we loop over the chunks, these will be computed in parallel
