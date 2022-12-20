@@ -1956,8 +1956,8 @@ class Simulation:
             start_frame_per_chunk = np.array([block[0] for block in frames_per_chunk])-start_frame
             end_frame_per_chunk = np.append(
                     start_frame_per_chunk[1::],
-                    np.array(frames_per_chunk[-1][-1] + frame_frequency)
-                    )-start_frame
+                    np.array(frames_per_chunk[-1][-1] + frame_frequency)-start_frame
+                    )
 
 
             # now we loop over the chunks, these will be computed in parallel
