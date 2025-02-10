@@ -7,7 +7,7 @@ from ovito.io import import_file
 from ovito.modifiers import *
 from joblib import Parallel, delayed
 import joblib
-
+import pdb
 
 import MDAnalysis as mdanalysis
 from MDAnalysis.lib.distances import capped_distance
@@ -1940,7 +1940,8 @@ class Simulation:
             saved_heights_per_frame[count_frames] = (
                 tmp_universe.atoms.positions[:, 2] - center_of_mass_z
             )
-
+        
+        saved_heights_per_frame -= np.mean(saved_heights_per_frame,axis=0)
         # now we can autocorrelate the heights for the blocks
         autocorrelation_block_average = []
         for block_id in np.arange(start_frame_per_block.shape[0]):
@@ -2028,3 +2029,261 @@ class Simulation:
                 )
 
         return HACF_per_atom_per_chunk, number_of_samples_correlated
+
+
+    def find_neighboring_atoms(self, cutoff:int=4.5):
+
+        universe_flat_configuration = mdanalysis.Universe(self.path_to_topology)
+        # Now use feature from MDAnalysis. This will be used to check the adjacent atoms
+        scan_neighbors = mdanalysis.lib.NeighborSearch.AtomNeighborSearch(
+            universe_flat_configuration.atoms, simulation.topology.cell.cellpar()
+        )
+
+        # Now loop over all defects which were previously assigned and find all atom ids
+        # within the cutoff specfied (default 2 angstroms)
+        simulation.atomic_neighbourhood = np.array(
+            [
+                scan_neighbors.search(
+                    universe_flat_configuration.atoms[i],
+                    cutoff,
+                    "A",
+                ).indices
+                for i in range(self.topology.get_global_number_of_atoms())
+            ]
+        )
+    
+    def compute_atomic_normal_vectors(
+    self,
+    r2_score_criterion=0.90,
+    start_time: int = None,
+    end_time: int = None,
+    frame_frequency: int = None,
+):
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # local variable to see how many fits fail
+        count_fit_fail = 0
+
+        # save coefficients in extra array
+        coefficients = np.zeros(
+            (
+                len(
+                    (tmp_universe.trajectory[start_frame:end_frame])[
+                        :: int(frame_frequency)
+                    ]
+                ),
+                self.topology.get_global_number_of_atoms(),
+                6,
+            )
+        )
+
+        # initialise arrays for normal vectors
+        nn_vec = []
+
+
+        # Loop over trajectory
+        for count_frames, frames in enumerate(
+            tqdm((tmp_universe.trajectory[start_frame:end_frame])[:: int(frame_frequency)])
+        ):
+            # 1. translate to atomic center
+            # we need to make sure this satisfies the pbc
+            relative_positions_local_atoms = np.asarray(
+                [
+                    utils.apply_minimum_image_convention_to_interatomic_vectors(
+                        tmp_universe.atoms[local_atoms].positions
+                        - tmp_universe.atoms.positions[count_atom],
+                        utils.get_cell_vectors_from_lengths_and_angles(
+                            tmp_universe.dimensions
+                        ),
+                    )
+                    for count_atom, local_atoms in enumerate(
+                        simulation.atomic_neighbourhood
+                    )
+                ]
+            )
+
+            # fitting
+            fitting_data = np.asarray(
+                [
+                    scipy.linalg.lstsq(
+                        np.c_[
+                            np.ones(atomic_positions.shape[0]),
+                            atomic_positions[:, :2],
+                            np.prod(atomic_positions[:, :2], axis=1),
+                            atomic_positions[:, :2] ** 2,
+                        ],
+                        atomic_positions[:, 2],
+                    )[0:2]
+                    for atomic_positions in relative_positions_local_atoms
+                ]
+            )
+
+
+            # extract residuums for each defect
+            residuums = fitting_data[:, 1]
+
+            # use these to compute r2-score
+            r2_scores_per_defect = np.asarray([1 - residuums[count] / (
+                neighbors.shape[0]
+                - np.var(neighbors[:, 2], axis=0)
+            ) for count,neighbors in enumerate(relative_positions_local_atoms)])
+
+            # now check where r2 scores satisfy criterion
+            black_sheep_indices = np.where(r2_scores_per_defect < r2_score_criterion)[0]
+            accepted = np.where(r2_scores_per_defect >= r2_score_criterion)[0]
+
+            # update counter for fit failures
+            count_fit_fail += len(black_sheep_indices)
+
+            # get coefficients for successful fits
+            valid_coefficients = np.concatenate(
+                np.delete(fitting_data[:, 0], black_sheep_indices)
+            ).reshape((-1, 6))
+
+            # save to array
+            coefficients[count_frames, accepted] = np.concatenate(
+                fitting_data[:, 0][accepted]
+            ).reshape((-1, 6))
+
+            coefficients[count_frames, black_sheep_indices] = np.nan
+
+
+        # wrap up everything
+        self.coefficients_fh = coefficients
+
+    def compute_atomic_normal_vectors_parallel(
+    self,
+    n_cores: int = 1,
+    r2_score_criterion=0.9,
+    start_time: int = None,
+    end_time: int = None,
+    frame_frequency: int = None,
+):
+
+        # get information about sampling
+        start_frame, end_frame, frame_frequency = self._get_sampling_frames(
+            start_time, end_time, frame_frequency
+        )
+
+        # use local variable for universe
+        tmp_universe = self.position_universe
+
+        # local variable to see how many fits fail
+        count_fit_fail = 0
+
+        # save coefficients in extra array
+        coefficients = np.zeros(
+            (
+                len(
+                    (tmp_universe.trajectory[start_frame:end_frame])[
+                        :: int(frame_frequency)
+                    ]
+                ),
+                self.topology.get_global_number_of_atoms(),
+                6,
+            )
+        )
+
+        # now we loop over the chunks, these will be computed in parallel
+        with Parallel(n_jobs=n_cores, verbose=1) as parallel:
+
+            # now compute per frame
+            (output_per_frame) = parallel(
+                delayed(_compute_atomic_nn_vectors_per_frame)(
+                    self, frame, r2_score_criterion
+                )
+                for frame in (tmp_universe.trajectory[start_frame:end_frame])[
+                    :: int(frame_frequency)
+                ]
+            )
+
+        nn_vec_xy_comp = np.concatenate(output_per_frame).reshape(
+            -1, self.topology.get_global_number_of_atoms(), 2
+        )
+
+        self.nn_vec_xy_comp = nn_vec_xy_comp
+    
+
+    def _compute_atomic_nn_vectors_per_frame(self, frame, r2_score_criterion):
+
+        # local variable to see how many fits fail
+        count_fit_fail = 0
+
+        # save coefficients in extra array
+        coefficients = np.zeros(
+            [
+                self.topology.get_global_number_of_atoms(),
+                6,
+            ]
+        )
+
+        # 1. translate to atomic center
+        # we need to make sure this satisfies the pbc
+        relative_positions_local_atoms = np.asarray(
+            [
+                utils.apply_minimum_image_convention_to_interatomic_vectors(
+                    frame.positions[local_atoms] - frame.positions[count_atom],
+                    utils.get_cell_vectors_from_lengths_and_angles(frame.dimensions),
+                )
+                for count_atom, local_atoms in enumerate(self.atomic_neighbourhood)
+            ],
+            dtype=object,
+        )
+
+        # fitting
+        fitting_data = np.asarray(
+            [
+                scipy.linalg.lstsq(
+                    np.c_[
+                        np.ones(atomic_positions.shape[0]),
+                        atomic_positions[:, :2],
+                        np.prod(atomic_positions[:, :2], axis=1),
+                        atomic_positions[:, :2] ** 2,
+                    ],
+                    atomic_positions[:, 2],
+                )[0:2]
+                for atomic_positions in relative_positions_local_atoms
+            ]
+        )
+
+        # extract residuums for each defect
+        residuums = fitting_data[:, 1]
+
+        # use these to compute r2-score
+        r2_scores_per_defect = np.asarray(
+            [
+                1
+                - residuums[count] / (neighbors.shape[0] - np.var(neighbors[:, 2], axis=0))
+                for count, neighbors in enumerate(relative_positions_local_atoms)
+            ]
+        )
+
+        # now check where r2 scores satisfy criterion
+        black_sheep_indices = np.where(r2_scores_per_defect < r2_score_criterion)[0]
+        accepted = np.where(r2_scores_per_defect >= r2_score_criterion)[0]
+
+        # update counter for fit failures
+        count_fit_fail += len(black_sheep_indices)
+
+        # save to array
+        coefficients[accepted] = np.concatenate(fitting_data[:, 0][accepted]).reshape(
+            (-1, 6)
+        )
+
+        coefficients[black_sheep_indices] = np.nan
+        
+        # only return the important coefficients
+        return coefficients[:, 1:3]
+
+
+def compute_r2_score(array):
+    residuums = np.sum(array)  # Placeholder computation, replace with your actual calculation
+    r2_score = 1 - residuums / (array.shape[0] - np.var(array))
+    return r2_score
